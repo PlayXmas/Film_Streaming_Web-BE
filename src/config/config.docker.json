@@ -1,0 +1,23 @@
+{
+    "development": {
+        "username": "film_user",
+        "password": "film_pass",
+        "database": "film_database",
+        "host": "db",
+        "dialect": "mysql"
+    },
+    "test": {
+        "username": "film_user",
+        "password": "film_pass",
+        "database": "film_database",
+        "host": "db",
+        "dialect": "mysql"
+    },
+    "production": {
+        "username": "film_user",
+        "password": "film_pass",
+        "database": "film_database",
+        "host": "db",
+        "dialect": "mysql"
+    }
+}

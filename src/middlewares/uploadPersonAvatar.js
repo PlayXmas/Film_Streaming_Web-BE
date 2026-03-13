@@ -1,0 +1,26 @@
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+const uploadDir = path.join(process.cwd(), "uploads", "people");
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname || "");
+        const personId = req.params.id || "0";
+        cb(null, `p${personId}_${Date.now()}${ext}`);
+    },
+});
+
+const fileFilter = (req, file, cb) => {
+    const ok = ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype);
+    cb(ok ? null : new Error("Chỉ hỗ trợ JPG/PNG/WEBP"), ok);
+};
+
+export const uploadPersonAvatar = multer({
+    storage,
+    fileFilter,
+    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+});
