@@ -27,10 +27,26 @@ export default (sequelize, DataTypes) => {
             note: {
                 type: DataTypes.TEXT,
             },
+            meta: {
+                type: DataTypes.JSON,
+                allowNull: true,
+            },
             status: {
                 type: DataTypes.ENUM("open", "processing", "closed"),
                 allowNull: false,
                 defaultValue: "open",
+            },
+            resolution: {
+                type: DataTypes.ENUM("resolved", "dismissed"),
+                allowNull: true,
+            },
+            handled_by: {
+                type: DataTypes.BIGINT.UNSIGNED,
+                allowNull: true,
+            },
+            handled_at: {
+                type: DataTypes.DATE,
+                allowNull: true,
             },
         },
         {

@@ -72,8 +72,11 @@ Rating.belongsTo(User, { foreignKey: "user_id" });
 User.hasMany(Favorite, { foreignKey: "user_id" });
 Favorite.belongsTo(User, { foreignKey: "user_id" });
 
-User.hasMany(Report, { foreignKey: "reporter_id" });
-Report.belongsTo(User, { foreignKey: "reporter_id" });
+User.hasMany(Report, { foreignKey: "reporter_id", as: "reportedReports" });
+Report.belongsTo(User, { foreignKey: "reporter_id", as: "reporter" });
+
+User.hasMany(Report, { foreignKey: "handled_by", as: "handledReports" });
+Report.belongsTo(User, { foreignKey: "handled_by", as: "handler" });
 
 // Title - Season - Episode
 Title.hasMany(Season, { foreignKey: "title_id" });
