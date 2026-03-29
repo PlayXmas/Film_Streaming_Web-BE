@@ -21,6 +21,10 @@ export default (sequelize, DataTypes) => {
                 allowNull: false,
                 defaultValue: "free",
             },
+            vip_expires_at: {
+                type: DataTypes.DATE,
+                allowNull: true,
+            },
             is_active: {
                 type: DataTypes.BOOLEAN,
                 allowNull: false,

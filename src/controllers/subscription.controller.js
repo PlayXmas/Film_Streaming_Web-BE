@@ -1,6 +1,7 @@
 // src/controllers/subscription.controller.js
 import { Op } from "sequelize";
 import { sequelize, Plan, Subscription, User, Payment } from "../models/index.js";
+import { grantVipToUser } from "../services/subscriptionAccess.service.js";
 
 /**
  * GET /api/me/subscription
@@ -102,10 +103,7 @@ export const changeMySubscription = async (req, res) => {
         );
 
         // 4) update role -> vip
-        await User.update(
-            { role: "vip" },
-            { where: { id: userId }, transaction: t }
-        );
+        await grantVipToUser(userId, endsAt, { transaction: t });
 
         // 5) tạo payment demo (succeeded luôn)
         const provider =

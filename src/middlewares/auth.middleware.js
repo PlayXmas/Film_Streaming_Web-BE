@@ -1,6 +1,7 @@
 // src/middlewares/auth.middleware.js
 import { verifyToken } from "../utils/jwt.util.js";
 import { User } from "../models/index.js";
+import { syncUserVipAccess } from "../services/subscriptionAccess.service.js";
 
 export const authenticate = async (req, res, next) => {
     try {
@@ -41,6 +42,8 @@ export const authenticate = async (req, res, next) => {
                 message: "Tài khoản không tồn tại hoặc đã bị vô hiệu hóa",
             });
         }
+
+        await syncUserVipAccess(user);
 
         req.user = user;
         next();

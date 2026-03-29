@@ -3,6 +3,7 @@ import { OAuth2Client } from "google-auth-library";
 import { User } from "../models/index.js";
 import { hashPassword, comparePassword } from "../utils/password.util.js";
 import { signToken } from "../utils/jwt.util.js";
+import { syncUserVipAccess } from "../services/subscriptionAccess.service.js";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "";
 const USER_ALLOWED_ROLES = ["free", "vip"];
@@ -26,8 +27,9 @@ function toAuthUser(user) {
         avatar_url: user.avatar_url,
         gender: user.gender,
         role: user.role,
+        vip_expires_at: user.vip_expires_at ?? null,
         is_active: user.is_active,
-        created_at: user.createdAt,
+        created_at: user.created_at ?? null,
     };
 }
 
@@ -332,6 +334,8 @@ export const loginWithGoogle = async (req, res) => {
             });
         }
 
+        await syncUserVipAccess(user);
+
         const roleError = validateUserRoleForLogin(
             user,
             USER_ALLOWED_ROLES,
@@ -396,6 +400,8 @@ const doLogin = (allowedRoles, roleErrorMessage) => async (req, res) => {
                 message: "Tài khoản đã bị khóa",
             });
         }
+
+        await syncUserVipAccess(user);
 
         const roleError = validateUserRoleForLogin(user, allowedRoles, roleErrorMessage);
         if (roleError) {

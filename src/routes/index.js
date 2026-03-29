@@ -14,6 +14,7 @@ import adminReportsRoutes from "./adminReports.route.js";
 import adminTitlesRoutes from "./adminTitles.route.js";
 import adminSeriesRoutes from "./adminSeries.route.js";
 import adminPeopleRoutes from "./adminPeople.route.js";
+import adminUsersRoutes from "./adminUsers.route.js";
 import recommendationRoutes from "./recommendation.route.js";
 
 const router = express.Router();
@@ -32,5 +33,6 @@ router.use("/admin", adminReportsRoutes);
 router.use("/admin", adminTitlesRoutes);
 router.use("/admin", adminSeriesRoutes);
 router.use("/admin", adminPeopleRoutes);
+router.use("/admin", adminUsersRoutes);
 router.use("/recommendations", recommendationRoutes);
 export default router;
