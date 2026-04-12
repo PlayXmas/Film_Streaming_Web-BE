@@ -15,7 +15,9 @@ import adminTitlesRoutes from "./adminTitles.route.js";
 import adminSeriesRoutes from "./adminSeries.route.js";
 import adminPeopleRoutes from "./adminPeople.route.js";
 import adminUsersRoutes from "./adminUsers.route.js";
+import adminPaymentsRoutes from "./adminPayments.route.js";
 import recommendationRoutes from "./recommendation.route.js";
+import paymentRoutes from "./payment.route.js";
 
 const router = express.Router();
 
@@ -27,6 +29,7 @@ router.use("/titles", titleRoutes);
 router.use("/person", personRouter);
 router.use("/reviews", reviewRoutes);
 router.use("/reports", reportRoutes);
+router.use("/payments", paymentRoutes);
 router.use("/plans", planRoutes);
 router.use("/admin", adminDashboardRoutes);
 router.use("/admin", adminReportsRoutes);
@@ -34,5 +37,6 @@ router.use("/admin", adminTitlesRoutes);
 router.use("/admin", adminSeriesRoutes);
 router.use("/admin", adminPeopleRoutes);
 router.use("/admin", adminUsersRoutes);
+router.use("/admin", adminPaymentsRoutes);
 router.use("/recommendations", recommendationRoutes);
 export default router;

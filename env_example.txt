@@ -18,3 +18,23 @@ JWT_EXPIRES_IN=7d
 SUBSCRIPTION_CRON_INTERVAL_MS=3600000
 # Đặt true nếu muốn tắt cron reconcile subscription
 DISABLE_SUBSCRIPTION_CRON=false
+
+# VNPay
+VNP_TMNCODE=
+VNP_HASH_SECRET=
+VNP_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+VNP_API_URL=https://sandbox.vnpayment.vn/merchant_webapi/api/transaction
+VNP_API_IP=127.0.0.1
+# Public backend callback URLs, ví dụ qua ngrok:
+# https://<your-backend-tunnel>/api/payments/vnpay/return
+# https://<your-backend-tunnel>/api/payments/vnpay/ipn
+VNP_RETURN_URL=
+VNP_IPN_URL=
+VNP_TIMEZONE=Asia/Ho_Chi_Minh
+VNP_LOCALE=vn
+VNP_ORDER_TYPE=other
+VNP_EXPIRE_MINUTES=15
+
+# Optional: sau khi backend nhận return từ VNPay sẽ redirect tiếp về frontend URL này.
+# Khi dev local có thể dùng: http://localhost:3000/payment-result
+PAYMENT_RETURN_REDIRECT_URL=http://localhost:5173/

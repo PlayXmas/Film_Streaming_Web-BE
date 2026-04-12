@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test:vnpay:smoke": "node src/scripts/vnpay-smoke-test.js",
+    "test:vnpay:edge": "node src/scripts/vnpay-edge-test.js"
   },
   "keywords": [],
   "author": "",

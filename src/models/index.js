@@ -21,6 +21,7 @@ import reviewModel from "./review.model.js";
 import planModel from "./plan.model.js";
 import subscriptionModel from "./subscription.model.js";
 import paymentModel from "./payment.model.js";
+import paymentEventModel from "./paymentEvent.model.js";
 import reportModel from "./report.model.js";
 import vTitlePublicModel from "./vTitlePublic.model.js";
 import vEpisodeEffectiveAccessModel from "./vEpisodeEffectiveAccess.model.js";
@@ -45,6 +46,7 @@ const Review = reviewModel(sequelize, DataTypes);
 const Plan = planModel(sequelize, DataTypes);
 const Subscription = subscriptionModel(sequelize, DataTypes);
 const Payment = paymentModel(sequelize, DataTypes);
+const PaymentEvent = paymentEventModel(sequelize, DataTypes);
 const Report = reportModel(sequelize, DataTypes);
 const VTitlePublic = vTitlePublicModel(sequelize, DataTypes);
 const VEpisodeEffectiveAccess = vEpisodeEffectiveAccessModel(sequelize, DataTypes);
@@ -132,9 +134,17 @@ Review.belongsTo(Episode, { foreignKey: "episode_id", as: "episode" });
 Plan.hasMany(Subscription, { foreignKey: "plan_id" });
 Subscription.belongsTo(Plan, { foreignKey: "plan_id" });
 
+// Plan - Payment
+Plan.hasMany(Payment, { foreignKey: "plan_id" });
+Payment.belongsTo(Plan, { foreignKey: "plan_id" });
+
 // Subscription - Payment
 Subscription.hasMany(Payment, { foreignKey: "subscription_id" });
 Payment.belongsTo(Subscription, { foreignKey: "subscription_id" });
+
+// Payment - PaymentEvent
+Payment.hasMany(PaymentEvent, { foreignKey: "payment_id" });
+PaymentEvent.belongsTo(Payment, { foreignKey: "payment_id" });
 
 // User - Recommendations
 User.hasMany(UserRecommendation, { foreignKey: "user_id" });
@@ -169,6 +179,7 @@ export {
   Plan,
   Subscription,
   Payment,
+  PaymentEvent,
   Report,
   UserRecommendation,
   VTitlePublic,

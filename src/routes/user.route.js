@@ -12,8 +12,8 @@ import {
     clearMyWatchHistory
 } from "../controllers/watchHistory.controller.js";
 import { getMyFavorites, addFavorite, removeFavorite } from "../controllers/favorite.controller.js";
-import { changeMySubscription, getMySubscription } from "../controllers/subscription.controller.js";
-import { getMyPayments } from "../controllers/payment.controller.js";
+import { getMySubscription } from "../controllers/subscription.controller.js";
+import { createVnpayPayment, getMyPayments } from "../controllers/payment.controller.js";
 
 const router = express.Router();
 
@@ -36,7 +36,8 @@ router.post("/favorites/:titleId", ...userOnly, addFavorite);
 router.delete("/favorites/:titleId", ...userOnly, removeFavorite);
 
 router.get("/subscription", ...userOnly, getMySubscription);
-router.post("/subscription", ...userOnly, changeMySubscription);
+router.post("/subscription", ...userOnly, createVnpayPayment);
+router.post("/subscription/vnpay/create", ...userOnly, createVnpayPayment);
 
 router.get("/payments", ...userOnly, getMyPayments);
 

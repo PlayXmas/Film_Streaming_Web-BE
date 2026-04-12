@@ -298,6 +298,10 @@ export async function buildDashboard({ from, to }) {
                     attributes: ["display_name"],
                 },
                 {
+                    model: Plan,
+                    attributes: ["code"],
+                },
+                {
                     model: Subscription,
                     attributes: ["id"],
                     include: [
@@ -367,7 +371,7 @@ export async function buildDashboard({ from, to }) {
         id: payment.id,
         created_at: payment.created_at,
         user_display_name: payment.User?.display_name || null,
-        plan_code: payment.Subscription?.Plan?.code || null,
+        plan_code: payment.Plan?.code || payment.Subscription?.Plan?.code || null,
         provider: payment.provider,
         amount: Number(payment.amount_cents || 0),
         status: payment.status,
