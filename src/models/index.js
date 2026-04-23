@@ -26,6 +26,7 @@ import reportModel from "./report.model.js";
 import vTitlePublicModel from "./vTitlePublic.model.js";
 import vEpisodeEffectiveAccessModel from "./vEpisodeEffectiveAccess.model.js";
 import userRecommendationModel from "./userRecommendation.model.js";
+import passwordResetTokenModel from "./passwordResetToken.model.js";
 
 // khởi tạo model
 const User = userModel(sequelize, DataTypes);
@@ -51,6 +52,7 @@ const Report = reportModel(sequelize, DataTypes);
 const VTitlePublic = vTitlePublicModel(sequelize, DataTypes);
 const VEpisodeEffectiveAccess = vEpisodeEffectiveAccessModel(sequelize, DataTypes);
 const UserRecommendation = userRecommendationModel(sequelize, DataTypes);
+const PasswordResetToken = passwordResetTokenModel(sequelize, DataTypes);
 
 /* ========== Associations ========== */
 
@@ -60,6 +62,9 @@ Subscription.belongsTo(User, { foreignKey: "user_id" });
 
 User.hasMany(Payment, { foreignKey: "user_id" });
 Payment.belongsTo(User, { foreignKey: "user_id" });
+
+User.hasMany(PasswordResetToken, { foreignKey: "user_id" });
+PasswordResetToken.belongsTo(User, { foreignKey: "user_id" });
 
 User.hasMany(WatchHistory, { foreignKey: "user_id" });
 WatchHistory.belongsTo(User, { foreignKey: "user_id" });
@@ -182,6 +187,7 @@ export {
   PaymentEvent,
   Report,
   UserRecommendation,
+  PasswordResetToken,
   VTitlePublic,
   VEpisodeEffectiveAccess,
 };

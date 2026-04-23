@@ -30,6 +30,16 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.INTEGER,
                 allowNull: false,
             },
+            is_active: {
+                type: DataTypes.BOOLEAN,
+                allowNull: false,
+                defaultValue: true,
+            },
+            features: {
+                type: DataTypes.JSON,
+                allowNull: false,
+                defaultValue: [],
+            },
         },
         {
             tableName: "plans",

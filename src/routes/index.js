@@ -16,6 +16,7 @@ import adminSeriesRoutes from "./adminSeries.route.js";
 import adminPeopleRoutes from "./adminPeople.route.js";
 import adminUsersRoutes from "./adminUsers.route.js";
 import adminPaymentsRoutes from "./adminPayments.route.js";
+import adminPlansRoutes from "./adminPlans.route.js";
 import recommendationRoutes from "./recommendation.route.js";
 import paymentRoutes from "./payment.route.js";
 
@@ -38,5 +39,6 @@ router.use("/admin", adminSeriesRoutes);
 router.use("/admin", adminPeopleRoutes);
 router.use("/admin", adminUsersRoutes);
 router.use("/admin", adminPaymentsRoutes);
+router.use("/admin", adminPlansRoutes);
 router.use("/recommendations", recommendationRoutes);
 export default router;

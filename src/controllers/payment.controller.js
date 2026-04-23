@@ -47,6 +47,13 @@ export const createVnpayPayment = async (req, res) => {
             await transaction.rollback();
             return res.status(404).json({ success: false, message: "Gói không tồn tại" });
         }
+        if (!plan.is_active) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: "Gói này hiện đang tạm ngừng bán",
+            });
+        }
 
         const now = new Date();
         const txnRef = buildTxnRef(userId);

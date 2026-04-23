@@ -13,6 +13,21 @@ DB_NAME=film_database
 JWT_SECRET=super_secret_change_meme
 JWT_EXPIRES_IN=7d
 
+# Email / SMTP for password reset
+# Gmail dev example:
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_SECURE=false
+# SMTP_USER=your_email@gmail.com
+# SMTP_PASS=your_16_character_app_password
+# SMTP_FROM="Film Streaming <your_email@gmail.com>"
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=
+
 # Subscription/VIP cron
 # Default trong code là 1 giờ nếu không set. Ví dụ 10 phút = 600000
 SUBSCRIPTION_CRON_INTERVAL_MS=3600000

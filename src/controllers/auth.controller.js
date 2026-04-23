@@ -1,9 +1,12 @@
 // src/controllers/auth.controller.js
+import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
-import { User } from "../models/index.js";
+import { Op } from "sequelize";
+import { User, PasswordResetToken, sequelize } from "../models/index.js";
 import { hashPassword, comparePassword } from "../utils/password.util.js";
 import { signToken } from "../utils/jwt.util.js";
 import { syncUserVipAccess } from "../services/subscriptionAccess.service.js";
+import { sendPasswordResetCode } from "../services/email.service.js";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "";
 const USER_ALLOWED_ROLES = ["free", "vip"];
@@ -12,6 +15,10 @@ const googleOAuthClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) 
 const USER_DISPLAY_NAME_MAX_LENGTH = 120;
 const USER_AVATAR_URL_MAX_LENGTH = 255;
 const USER_GOOGLE_ID_MAX_LENGTH = 64;
+const PASSWORD_RESET_EXPIRES_MINUTES = 15;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_REQUEST_MESSAGE =
+    "Nếu email tồn tại, mã xác thực đã được gửi đến email của bạn";
 
 function createHttpError(message, status) {
     const error = new Error(message);
@@ -42,6 +49,26 @@ function buildAuthData(user) {
             role: user.role,
         }),
     };
+}
+
+function normalizeEmail(value) {
+    return String(value || "").trim().toLowerCase();
+}
+
+function generateOtpCode() {
+    return crypto.randomInt(100000, 1000000).toString();
+}
+
+function generateResetToken() {
+    return crypto.randomBytes(32).toString("hex");
+}
+
+function hashLookupToken(value) {
+    return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+function getPasswordResetExpiry() {
+    return new Date(Date.now() + PASSWORD_RESET_EXPIRES_MINUTES * 60 * 1000);
 }
 
 function normalizeDisplayName(value, fallbackEmail = "") {
@@ -361,6 +388,238 @@ export const loginWithGoogle = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Lỗi server khi đăng nhập Google",
+        });
+    }
+};
+
+// ========== FORGOT PASSWORD ==========
+export const forgotPassword = async (req, res) => {
+    let createdResetToken = null;
+
+    try {
+        const email = normalizeEmail(req.body?.email);
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: "Vui lòng nhập email",
+            });
+        }
+
+        const user = await User.findOne({ where: { email } });
+        if (!user || user.is_active === false) {
+            return res.status(200).json({
+                success: true,
+                message: PASSWORD_RESET_REQUEST_MESSAGE,
+            });
+        }
+
+        const otpCode = generateOtpCode();
+        const codeHash = await hashPassword(otpCode);
+
+        createdResetToken = await sequelize.transaction(async (transaction) => {
+            await PasswordResetToken.update(
+                { revoked_at: new Date() },
+                {
+                    where: {
+                        user_id: user.id,
+                        used_at: null,
+                        revoked_at: null,
+                    },
+                    transaction,
+                }
+            );
+
+            return PasswordResetToken.create(
+                {
+                    user_id: user.id,
+                    email: user.email,
+                    code_hash: codeHash,
+                    expires_at: getPasswordResetExpiry(),
+                    attempts: 0,
+                },
+                { transaction }
+            );
+        });
+
+        await sendPasswordResetCode(user.email, otpCode);
+
+        return res.status(200).json({
+            success: true,
+            message: PASSWORD_RESET_REQUEST_MESSAGE,
+        });
+    } catch (err) {
+        if (createdResetToken?.id) {
+            await PasswordResetToken.update(
+                { revoked_at: new Date() },
+                { where: { id: createdResetToken.id } }
+            ).catch((revokeErr) => {
+                console.error("forgotPassword revoke error:", revokeErr);
+            });
+        }
+
+        console.error("forgotPassword error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Lỗi server khi gửi mã xác thực",
+        });
+    }
+};
+
+export const verifyOtp = async (req, res) => {
+    try {
+        const email = normalizeEmail(req.body?.email);
+        const code = String(req.body?.otp || req.body?.code || "").trim();
+
+        if (!email || !code) {
+            return res.status(400).json({
+                success: false,
+                message: "Vui lòng cung cấp email và mã xác thực",
+            });
+        }
+
+        const resetRequest = await PasswordResetToken.findOne({
+            where: {
+                email,
+                used_at: null,
+                revoked_at: null,
+                expires_at: { [Op.gt]: new Date() },
+            },
+            order: [["created_at", "DESC"]],
+        });
+
+        if (!resetRequest) {
+            return res.status(400).json({
+                success: false,
+                message: "Mã xác thực không hợp lệ hoặc đã hết hạn",
+            });
+        }
+
+        if (resetRequest.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+            resetRequest.revoked_at = new Date();
+            await resetRequest.save();
+
+            return res.status(400).json({
+                success: false,
+                message: "Mã xác thực đã bị khóa do nhập sai quá nhiều lần",
+            });
+        }
+
+        const isMatch = await comparePassword(code, resetRequest.code_hash);
+        if (!isMatch) {
+            resetRequest.attempts += 1;
+
+            if (resetRequest.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+                resetRequest.revoked_at = new Date();
+            }
+
+            await resetRequest.save();
+
+            return res.status(400).json({
+                success: false,
+                message: "Mã xác thực không đúng",
+            });
+        }
+
+        const resetToken = generateResetToken();
+        resetRequest.verified_at = new Date();
+        resetRequest.reset_token_hash = hashLookupToken(resetToken);
+        await resetRequest.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Mã xác thực hợp lệ",
+            data: {
+                reset_token: resetToken,
+            },
+        });
+    } catch (err) {
+        console.error("verifyOtp error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Lỗi server khi xác thực mã",
+        });
+    }
+};
+
+export const resetPassword = async (req, res) => {
+    try {
+        const resetToken = String(req.body?.reset_token || "").trim();
+        const newPassword = String(req.body?.new_password || "");
+        const confirmPassword = String(req.body?.confirm_password || "");
+
+        if (!resetToken || !newPassword || !confirmPassword) {
+            return res.status(400).json({
+                success: false,
+                message: "Vui lòng nhập đầy đủ thông tin",
+            });
+        }
+
+        if (newPassword.length < 8) {
+            return res.status(400).json({
+                success: false,
+                message: "Mật khẩu phải có ít nhất 8 ký tự",
+            });
+        }
+
+        if (newPassword !== confirmPassword) {
+            return res.status(400).json({
+                success: false,
+                message: "Mật khẩu xác nhận không khớp",
+            });
+        }
+
+        const resetTokenHash = hashLookupToken(resetToken);
+        const passwordHash = await hashPassword(newPassword);
+
+        await sequelize.transaction(async (transaction) => {
+            const resetRequest = await PasswordResetToken.findOne({
+                where: {
+                    reset_token_hash: resetTokenHash,
+                    verified_at: { [Op.ne]: null },
+                    used_at: null,
+                    revoked_at: null,
+                    expires_at: { [Op.gt]: new Date() },
+                },
+                transaction,
+                lock: transaction.LOCK.UPDATE,
+            });
+
+            if (!resetRequest) {
+                throw createHttpError("Phiên đặt lại mật khẩu không hợp lệ hoặc đã hết hạn", 400);
+            }
+
+            const user = await User.findByPk(resetRequest.user_id, {
+                transaction,
+                lock: transaction.LOCK.UPDATE,
+            });
+
+            if (!user || user.is_active === false) {
+                throw createHttpError("Tài khoản không hợp lệ", 400);
+            }
+
+            user.password_hash = passwordHash;
+            resetRequest.used_at = new Date();
+
+            await user.save({ transaction });
+            await resetRequest.save({ transaction });
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Đổi mật khẩu thành công. Bạn có thể đăng nhập ngay bây giờ.",
+        });
+    } catch (err) {
+        if (err.status) {
+            return res.status(err.status).json({
+                success: false,
+                message: err.message,
+            });
+        }
+
+        console.error("resetPassword error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Lỗi server khi đổi mật khẩu",
         });
     }
 };
