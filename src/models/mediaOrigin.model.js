@@ -38,6 +38,35 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.TEXT,
                 allowNull: false,
             },
+            source_file_path: {
+                type: DataTypes.STRING(500),
+                allowNull: true,
+            },
+            source_file_name: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+            },
+            hls_master_path: {
+                type: DataTypes.STRING(500),
+                allowNull: true,
+            },
+            processing_status: {
+                type: DataTypes.ENUM("ready", "uploaded", "queued", "processing", "failed"),
+                allowNull: false,
+                defaultValue: "ready",
+            },
+            processing_error: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
+            duration_sec: {
+                type: DataTypes.INTEGER,
+                allowNull: true,
+            },
+            last_processed_at: {
+                type: DataTypes.DATE,
+                allowNull: true,
+            },
             is_active: {
                 type: DataTypes.BOOLEAN,
                 allowNull: false,

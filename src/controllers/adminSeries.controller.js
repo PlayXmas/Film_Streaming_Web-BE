@@ -13,8 +13,6 @@ const SERIES_TYPE = "series";
 const MEDIA_PURPOSES = new Set(["content", "trailer"]);
 const EPISODE_SCOPE = "episode";
 const ACCESS_TIERS = new Set(["free", "vip"]);
-const ORIGIN_DELIVERIES = new Set(["HLS", "DASH", "MP4", "YOUTUBE"]);
-const ORIGIN_AUDIO_TYPES = new Set(["sub", "dub", "voiceover"]);
 
 function parseBoolean(value) {
     if (typeof value === "boolean") return value;
@@ -49,45 +47,6 @@ function normalizeAccessTier(value) {
     return ACCESS_TIERS.has(tier) ? tier : null;
 }
 
-function normalizeDelivery(value) {
-    const normalized = normalizeText(value);
-    if (!normalized) return null;
-    const delivery = normalized.toUpperCase();
-    return ORIGIN_DELIVERIES.has(delivery) ? delivery : null;
-}
-
-function normalizeAudioType(value) {
-    const normalized = normalizeText(value);
-    if (!normalized) return null;
-    const audioType = normalized.toLowerCase();
-    return ORIGIN_AUDIO_TYPES.has(audioType) ? audioType : null;
-}
-
-function buildOriginPayload(body = {}) {
-    const payload = {};
-    let error = null;
-
-    if (body.delivery !== undefined) {
-        const delivery = normalizeDelivery(body.delivery);
-        if (!delivery) error = "delivery không hợp lệ (HLS, DASH, MP4, YOUTUBE)";
-        else payload.delivery = delivery;
-    }
-    if (body.audio_type !== undefined) {
-        const audioType = normalizeAudioType(body.audio_type);
-        if (!audioType) error = "audio_type không hợp lệ (sub, dub, voiceover)";
-        else payload.audio_type = audioType;
-    }
-    if (body.url !== undefined) payload.url = normalizeText(body.url);
-
-    const hasSubtitles = parseBoolean(body.has_subtitles);
-    if (hasSubtitles !== null) payload.has_subtitles = hasSubtitles;
-
-    const isActive = parseBoolean(body.is_active);
-    if (isActive !== null) payload.is_active = isActive;
-
-    return { payload, error };
-}
-
 function mapOrigin(originInstance) {
     const origin = originInstance?.toJSON ? originInstance.toJSON() : originInstance;
     const variants = Array.isArray(origin?.MediaVariants) ? origin.MediaVariants : [];
@@ -101,6 +60,13 @@ function mapOrigin(originInstance) {
         audio_type: origin.audio_type,
         has_subtitles: !!origin.has_subtitles,
         url: origin.url,
+        hls_master_path: origin.hls_master_path ?? null,
+        source_file_path: origin.source_file_path ?? null,
+        source_file_name: origin.source_file_name ?? null,
+        processing_status: origin.processing_status ?? "ready",
+        processing_error: origin.processing_error ?? null,
+        duration_sec: origin.duration_sec ?? null,
+        last_processed_at: origin.last_processed_at ?? null,
         is_active: !!origin.is_active,
         is_primary: !!origin.is_primary,
         variants: variants.map((v) => ({
@@ -109,6 +75,11 @@ function mapOrigin(originInstance) {
             quality: v.quality,
             required_tier: v.required_tier,
             bitrate_kbps: v.bitrate_kbps ?? null,
+            playlist_url: v.playlist_url ?? null,
+            width: v.width ?? null,
+            height: v.height ?? null,
+            codec_video: v.codec_video ?? null,
+            codec_audio: v.codec_audio ?? null,
         })),
     };
 }
@@ -553,7 +524,7 @@ export const deleteEpisode = async (req, res) => {
     }
 };
 
-// ===== Media origins (episode multi) =====
+// ===== Managed media origins (episode multi) =====
 
 export const listEpisodeMediaOrigins = async (req, res) => {
     try {
@@ -591,146 +562,6 @@ export const listEpisodeMediaOrigins = async (req, res) => {
         return res.json({ success: true, data });
     } catch (err) {
         console.error("listEpisodeMediaOrigins error:", err);
-        return res.status(500).json({ success: false, message: "Lỗi server" });
-    }
-};
-
-export const createEpisodeMediaOrigin = async (req, res) => {
-    try {
-        const episode = await Episode.findByPk(req.params.episodeId, {
-            attributes: ["id", "season_id"],
-        });
-        if (!episode) {
-            return res.status(404).json({ success: false, message: "Không tìm thấy episode" });
-        }
-
-        const purpose = String(req.body?.purpose || "content").toLowerCase();
-        if (!MEDIA_PURPOSES.has(purpose)) {
-            return res.status(400).json({
-                success: false,
-                message: "purpose chỉ nhận content hoặc trailer",
-            });
-        }
-
-        const { payload, error } = buildOriginPayload(req.body || {});
-        if (error) {
-            return res.status(400).json({ success: false, message: error });
-        }
-        if (!payload.delivery) {
-            return res.status(400).json({
-                success: false,
-                message: "delivery là bắt buộc",
-            });
-        }
-        if (!payload.url) {
-            return res.status(400).json({
-                success: false,
-                message: "url là bắt buộc",
-            });
-        }
-
-        const created = await MediaOrigin.create({
-            scope_type: EPISODE_SCOPE,
-            scope_id: episode.id,
-            purpose,
-            ...payload,
-        });
-
-        const full = await MediaOrigin.findByPk(created.id, {
-            include: [{ model: MediaVariant }],
-        });
-
-        return res.status(201).json({ success: true, data: mapOrigin(full) });
-    } catch (err) {
-        console.error("createEpisodeMediaOrigin error:", err);
-        return res.status(500).json({ success: false, message: "Lỗi server" });
-    }
-};
-
-export const updateEpisodeMediaOrigin = async (req, res) => {
-    try {
-        const origin = await MediaOrigin.findByPk(req.params.originId);
-        if (!origin) {
-            return res.status(404).json({ success: false, message: "Không tìm thấy origin" });
-        }
-        if (origin.scope_type !== EPISODE_SCOPE) {
-            return res.status(400).json({ success: false, message: "Origin không thuộc episode" });
-        }
-
-        const { payload, error } = buildOriginPayload(req.body || {});
-        if (error) {
-            return res.status(400).json({ success: false, message: error });
-        }
-        if (Object.keys(payload).length === 0) {
-            return res.status(400).json({ success: false, message: "Không có dữ liệu cập nhật" });
-        }
-
-        await origin.update(payload);
-        const full = await MediaOrigin.findByPk(origin.id, { include: [{ model: MediaVariant }] });
-        return res.json({ success: true, data: mapOrigin(full) });
-    } catch (err) {
-        console.error("updateEpisodeMediaOrigin error:", err);
-        return res.status(500).json({ success: false, message: "Lỗi server" });
-    }
-};
-
-export const setEpisodeMediaOriginPrimary = async (req, res) => {
-    try {
-        const result = await sequelize.transaction(async (transaction) => {
-            const origin = await MediaOrigin.findByPk(req.params.originId, {
-                transaction,
-                lock: transaction.LOCK.UPDATE,
-            });
-            if (!origin) {
-                return {
-                    status: 404,
-                    body: { success: false, message: "Không tìm thấy origin" },
-                };
-            }
-            if (origin.scope_type !== EPISODE_SCOPE) {
-                return {
-                    status: 400,
-                    body: { success: false, message: "Origin không thuộc episode" },
-                };
-            }
-
-            const groupWhere = {
-                scope_type: EPISODE_SCOPE,
-                scope_id: origin.scope_id,
-                purpose: origin.purpose,
-            };
-
-            await MediaOrigin.findAll({
-                where: groupWhere,
-                attributes: ["id"],
-                transaction,
-                lock: transaction.LOCK.UPDATE,
-            });
-
-            const flag = parseBoolean(req.body?.is_primary);
-            if (flag === false) {
-                await origin.update({ is_primary: false }, { transaction });
-                return {
-                    status: 200,
-                    body: { success: true, data: { origin_id: origin.id, is_primary: 0 } },
-                };
-            }
-
-            await MediaOrigin.update(
-                { is_primary: false },
-                { where: groupWhere, transaction }
-            );
-            await origin.update({ is_primary: true }, { transaction });
-
-            return {
-                status: 200,
-                body: { success: true, data: { origin_id: origin.id, is_primary: 1 } },
-            };
-        });
-
-        return res.status(result.status).json(result.body);
-    } catch (err) {
-        console.error("setEpisodeMediaOriginPrimary error:", err);
         return res.status(500).json({ success: false, message: "Lỗi server" });
     }
 };

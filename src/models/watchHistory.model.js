@@ -20,12 +20,25 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.BIGINT.UNSIGNED,
                 allowNull: true,
             },
-            progress_sec: {
+            current_time_sec: {
                 type: DataTypes.INTEGER,
                 allowNull: false,
                 defaultValue: 0,
             },
-            duration_sec: { type: DataTypes.INTEGER },
+            duration_sec: {
+                type: DataTypes.INTEGER,
+                allowNull: true,
+            },
+            progress_percent: {
+                type: DataTypes.INTEGER,
+                allowNull: false,
+                defaultValue: 0,
+            },
+            is_finished: {
+                type: DataTypes.BOOLEAN,
+                allowNull: false,
+                defaultValue: false,
+            },
             last_watched_at: {
                 type: DataTypes.DATE,
                 allowNull: false,

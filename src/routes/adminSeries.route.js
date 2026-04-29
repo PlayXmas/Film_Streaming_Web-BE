@@ -2,9 +2,9 @@ import express from "express";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/role.middleware.js";
 import { uploadTitleImages } from "../middlewares/uploadTitleImages.js";
+import { uploadMediaVideo } from "../middlewares/uploadMediaVideo.js";
 import {
     createAdminSeries,
-    createEpisodeMediaOrigin,
     createSeasonEpisode,
     createSeriesSeason,
     deleteAdminSeries,
@@ -15,12 +15,13 @@ import {
     listEpisodeMediaOrigins,
     listSeasonEpisodes,
     listSeriesSeasons,
-    setEpisodeMediaOriginPrimary,
     updateAdminSeries,
     updateEpisode,
-    updateEpisodeMediaOrigin,
     updateSeason,
 } from "../controllers/adminSeries.controller.js";
+import {
+    uploadEpisodeSourceVideo,
+} from "../controllers/adminMediaPipeline.controller.js";
 
 const router = express.Router();
 
@@ -52,7 +53,5 @@ router.delete("/episodes/:episodeId", deleteEpisode);
 
 // Episode media origins (multi)
 router.get("/episodes/:episodeId/media-origins", listEpisodeMediaOrigins);
-router.post("/episodes/:episodeId/media-origins", createEpisodeMediaOrigin);
-router.put("/media-origins/:originId", updateEpisodeMediaOrigin);
-router.patch("/media-origins/:originId/set-primary", setEpisodeMediaOriginPrimary);
+router.post("/episodes/:episodeId/media-upload", uploadMediaVideo.single("video"), uploadEpisodeSourceVideo);
 export default router;

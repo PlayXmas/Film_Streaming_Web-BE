@@ -14,7 +14,9 @@ import creditModel from "./credit.model.js";
 import imageModel from "./image.model.js";
 import mediaOriginModel from "./mediaOrigin.model.js";
 import mediaVariantModel from "./mediaVariant.model.js";
+import mediaJobModel from "./mediaJob.model.js";
 import watchHistoryModel from "./watchHistory.model.js";
+import playbackEventModel from "./playbackEvent.model.js";
 import favoriteModel from "./favorite.model.js";
 import ratingModel from "./rating.model.js";
 import reviewModel from "./review.model.js";
@@ -40,7 +42,9 @@ const Credit = creditModel(sequelize, DataTypes);
 const Image = imageModel(sequelize, DataTypes);
 const MediaOrigin = mediaOriginModel(sequelize, DataTypes);
 const MediaVariant = mediaVariantModel(sequelize, DataTypes);
+const MediaJob = mediaJobModel(sequelize, DataTypes);
 const WatchHistory = watchHistoryModel(sequelize, DataTypes);
+const PlaybackEvent = playbackEventModel(sequelize, DataTypes);
 const Favorite = favoriteModel(sequelize, DataTypes);
 const Rating = ratingModel(sequelize, DataTypes);
 const Review = reviewModel(sequelize, DataTypes);
@@ -68,6 +72,9 @@ PasswordResetToken.belongsTo(User, { foreignKey: "user_id" });
 
 User.hasMany(WatchHistory, { foreignKey: "user_id" });
 WatchHistory.belongsTo(User, { foreignKey: "user_id" });
+
+User.hasMany(PlaybackEvent, { foreignKey: "user_id" });
+PlaybackEvent.belongsTo(User, { foreignKey: "user_id" });
 
 // User - Review
 User.hasMany(Review, { foreignKey: "user_id", as: "reviews" });
@@ -127,9 +134,15 @@ Favorite.belongsTo(Title, { foreignKey: "title_id" });
 Title.hasMany(WatchHistory, { foreignKey: "title_id" });
 WatchHistory.belongsTo(Title, { foreignKey: "title_id" });
 
+Title.hasMany(PlaybackEvent, { foreignKey: "title_id" });
+PlaybackEvent.belongsTo(Title, { foreignKey: "title_id" });
+
 // Episode - history
 Episode.hasMany(WatchHistory, { foreignKey: "episode_id" });
 WatchHistory.belongsTo(Episode, { foreignKey: "episode_id" });
+
+Episode.hasMany(PlaybackEvent, { foreignKey: "episode_id" });
+PlaybackEvent.belongsTo(Episode, { foreignKey: "episode_id" });
 
 // Episode - review (episode_id có thể NULL)
 Episode.hasMany(Review, { foreignKey: "episode_id", as: "episodeReviews" });
@@ -163,6 +176,16 @@ UserRecommendation.belongsTo(Title, { foreignKey: "title_id" });
 MediaOrigin.hasMany(MediaVariant, { foreignKey: "origin_id" });
 MediaVariant.belongsTo(MediaOrigin, { foreignKey: "origin_id" });
 
+MediaOrigin.hasMany(PlaybackEvent, { foreignKey: "origin_id" });
+PlaybackEvent.belongsTo(MediaOrigin, { foreignKey: "origin_id" });
+
+MediaVariant.hasMany(PlaybackEvent, { foreignKey: "variant_id" });
+PlaybackEvent.belongsTo(MediaVariant, { foreignKey: "variant_id" });
+
+// MediaOrigin - MediaJob
+MediaOrigin.hasMany(MediaJob, { foreignKey: "origin_id" });
+MediaJob.belongsTo(MediaOrigin, { foreignKey: "origin_id" });
+
 // export tất cả
 export {
   sequelize,
@@ -177,7 +200,9 @@ export {
   Image,
   MediaOrigin,
   MediaVariant,
+  MediaJob,
   WatchHistory,
+  PlaybackEvent,
   Favorite,
   Rating,
   Review,

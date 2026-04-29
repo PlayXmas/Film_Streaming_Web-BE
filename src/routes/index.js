@@ -11,6 +11,7 @@ import reportRoutes from "./report.route.js";
 import planRoutes from "./plan.route.js";
 import adminDashboardRoutes from "./adminDashboard.route.js";
 import adminReportsRoutes from "./adminReports.route.js";
+import adminMediaRoutes from "./adminMedia.route.js";
 import adminTitlesRoutes from "./adminTitles.route.js";
 import adminSeriesRoutes from "./adminSeries.route.js";
 import adminPeopleRoutes from "./adminPeople.route.js";
@@ -19,6 +20,7 @@ import adminPaymentsRoutes from "./adminPayments.route.js";
 import adminPlansRoutes from "./adminPlans.route.js";
 import recommendationRoutes from "./recommendation.route.js";
 import paymentRoutes from "./payment.route.js";
+import mediaRoutes from "./media.route.js";
 
 const router = express.Router();
 
@@ -31,9 +33,11 @@ router.use("/person", personRouter);
 router.use("/reviews", reviewRoutes);
 router.use("/reports", reportRoutes);
 router.use("/payments", paymentRoutes);
+router.use("/media", mediaRoutes);
 router.use("/plans", planRoutes);
 router.use("/admin", adminDashboardRoutes);
 router.use("/admin", adminReportsRoutes);
+router.use("/admin", adminMediaRoutes);
 router.use("/admin", adminTitlesRoutes);
 router.use("/admin", adminSeriesRoutes);
 router.use("/admin", adminPeopleRoutes);

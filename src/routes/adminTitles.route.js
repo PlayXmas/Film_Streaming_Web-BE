@@ -2,20 +2,19 @@ import express from "express";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/role.middleware.js";
 import { uploadTitleImages } from "../middlewares/uploadTitleImages.js";
+import { uploadMediaVideo } from "../middlewares/uploadMediaVideo.js";
 import {
-    addMediaVariant,
     listAdminTitles,
     getAdminTitle,
     createAdminTitle,
-    deleteMediaOrigin,
     updateAdminTitle,
-    deleteMediaVariant,
     deleteAdminTitle,
     replaceTitleCredits,
     listTitleMediaOrigins,
-    updateMediaVariant,
-    upsertTitleMediaOriginByPurpose,
 } from "../controllers/adminTitles.controller.js";
+import {
+    uploadTitleSourceVideo,
+} from "../controllers/adminMediaPipeline.controller.js";
 
 const router = express.Router();
 
@@ -34,11 +33,6 @@ router.delete("/titles/:id", deleteAdminTitle);
 router.put("/titles/:id/credits", replaceTitleCredits);
 
 router.get("/titles/:id/media-origins", listTitleMediaOrigins);
-router.put("/titles/:id/media-origins/:purpose", upsertTitleMediaOriginByPurpose);
-router.delete("/media-origins/:originId", deleteMediaOrigin);
-
-router.post("/media-origins/:originId/variants", addMediaVariant);
-router.put("/media-variants/:id", updateMediaVariant);
-router.delete("/media-variants/:id", deleteMediaVariant);
+router.post("/titles/:id/media-upload", uploadMediaVideo.single("video"), uploadTitleSourceVideo);
 
 export default router;

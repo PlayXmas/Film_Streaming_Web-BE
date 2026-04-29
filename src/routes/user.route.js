@@ -6,6 +6,7 @@ import { authenticate } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/role.middleware.js";
 
 import {
+    createPlaybackEvent,
     getMyWatchHistory,
     updateMyWatchHistory,
     deleteMyWatchHistoryItem,
@@ -30,6 +31,7 @@ router.get("/watch-history", ...userOnly, getMyWatchHistory);
 router.put("/watch-history", ...userOnly, updateMyWatchHistory);
 router.delete("/watch-history/:id", ...userOnly, deleteMyWatchHistoryItem);
 router.delete("/watch-history", ...userOnly, clearMyWatchHistory);
+router.post("/playback-events", ...userOnly, createPlaybackEvent);
 
 router.get("/favorites", ...userOnly, getMyFavorites);
 router.post("/favorites/:titleId", ...userOnly, addFavorite);

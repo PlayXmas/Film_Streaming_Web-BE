@@ -34,6 +34,23 @@ SUBSCRIPTION_CRON_INTERVAL_MS=3600000
 # Đặt true nếu muốn tắt cron reconcile subscription
 DISABLE_SUBSCRIPTION_CRON=false
 
+# Local media pipeline / HLS
+# Mặc định nếu bỏ trống MEDIA_STORAGE_ROOT thì dùng <project>/uploads/media
+MEDIA_STORAGE_ROOT=
+# Giới hạn upload video nguồn (byte). Mặc định trong code là 10GB
+MEDIA_UPLOAD_MAX_BYTES=10737418240
+# Polling interval cho worker xử lý media job
+MEDIA_JOB_INTERVAL_MS=5000
+# Đặt true nếu muốn tắt worker xử lý video nền
+DISABLE_MEDIA_PROCESSING_CRON=false
+# Giới hạn quality output tối đa. Ví dụ 720 để chỉ encode tới 720p
+MEDIA_MAX_OUTPUT_HEIGHT=1080
+# FFmpeg preset/crf và HLS segment config
+MEDIA_FFMPEG_PRESET=veryfast
+MEDIA_FFMPEG_CRF=21
+MEDIA_HLS_SEGMENT_SECONDS=6
+MEDIA_HLS_GOP=48
+
 # VNPay
 VNP_TMNCODE=
 VNP_HASH_SECRET=

@@ -72,7 +72,6 @@ export const adminTitleInclude = [
     },
 ];
 
-const MEDIA_PURPOSES = new Set(["content", "trailer"]);
 const MEDIA_SCOPE_TYPE = "title";
 const MEDIA_TITLE_TYPE = "movie";
 
@@ -143,27 +142,6 @@ function parseBoolean(value) {
     return null;
 }
 
-function buildOriginPayload(body = {}) {
-    const payload = {};
-
-    const delivery = normalizeText(body.delivery);
-    if (delivery !== undefined) payload.delivery = delivery;
-
-    const audioType = normalizeText(body.audio_type);
-    if (audioType !== undefined) payload.audio_type = audioType;
-
-    const url = normalizeText(body.url);
-    if (url !== undefined) payload.url = url;
-
-    const hasSubtitles = parseBoolean(body.has_subtitles);
-    if (hasSubtitles !== null) payload.has_subtitles = hasSubtitles;
-
-    const isActive = parseBoolean(body.is_active);
-    if (isActive !== null) payload.is_active = isActive;
-
-    return payload;
-}
-
 function mapOrigin(originInstance) {
     const origin = originInstance?.toJSON ? originInstance.toJSON() : originInstance;
     const variants = Array.isArray(origin?.MediaVariants) ? origin.MediaVariants : [];
@@ -177,6 +155,13 @@ function mapOrigin(originInstance) {
         audio_type: origin.audio_type,
         has_subtitles: !!origin.has_subtitles,
         url: origin.url,
+        hls_master_path: origin.hls_master_path ?? null,
+        source_file_path: origin.source_file_path ?? null,
+        source_file_name: origin.source_file_name ?? null,
+        processing_status: origin.processing_status ?? "ready",
+        processing_error: origin.processing_error ?? null,
+        duration_sec: origin.duration_sec ?? null,
+        last_processed_at: origin.last_processed_at ?? null,
         is_active: !!origin.is_active,
         variants: variants.map((v) => ({
             id: v.id,
@@ -184,6 +169,11 @@ function mapOrigin(originInstance) {
             quality: v.quality,
             required_tier: v.required_tier,
             bitrate_kbps: v.bitrate_kbps ?? null,
+            playlist_url: v.playlist_url ?? null,
+            width: v.width ?? null,
+            height: v.height ?? null,
+            codec_video: v.codec_video ?? null,
+            codec_audio: v.codec_audio ?? null,
         })),
     };
 }
@@ -785,7 +775,7 @@ export const deleteAdminTitle = async (req, res) => {
     }
 };
 
-// ===== Media origins/variants (movie only) =====
+// ===== Managed media origins (movie only) =====
 
 // GET /api/admin/titles/:id/media-origins
 export const listTitleMediaOrigins = async (req, res) => {
@@ -809,167 +799,6 @@ export const listTitleMediaOrigins = async (req, res) => {
         return res.json({ success: true, data });
     } catch (err) {
         console.error("listTitleMediaOrigins error:", err);
-        return res.status(500).json({ success: false, message: "Lỗi server" });
-    }
-};
-
-// PUT /api/admin/titles/:id/media-origins/:purpose
-export const upsertTitleMediaOriginByPurpose = async (req, res) => {
-    try {
-        const purpose = String(req.params.purpose || "").toLowerCase();
-        if (!MEDIA_PURPOSES.has(purpose)) {
-            return res.status(400).json({
-                success: false,
-                message: "purpose chỉ nhận content hoặc trailer",
-            });
-        }
-
-        const title = await findMovieForMedia(req.params.id);
-        if (!title) {
-            return res.status(404).json({ success: false, message: "Không tìm thấy movie" });
-        }
-
-        const payload = buildOriginPayload(req.body || {});
-        const hasPayload = Object.keys(payload).length > 0;
-
-        const where = { scope_type: MEDIA_SCOPE_TYPE, scope_id: title.id, purpose };
-        const existing = await MediaOrigin.findOne({ where });
-
-        if (!existing) {
-            if (!payload.delivery) {
-                return res.status(400).json({
-                    success: false,
-                    message: "delivery là bắt buộc",
-                });
-            }
-            if (!payload.url) {
-                return res.status(400).json({
-                    success: false,
-                    message: "url là bắt buộc",
-                });
-            }
-
-            const created = await MediaOrigin.create({ ...where, ...payload });
-            const full = await MediaOrigin.findByPk(created.id, {
-                include: [{ model: MediaVariant }],
-            });
-
-            return res.status(201).json({ success: true, data: mapOrigin(full) });
-        }
-
-        if (!hasPayload) {
-            return res.status(400).json({
-                success: false,
-                message: "Không có dữ liệu cập nhật",
-            });
-        }
-
-        await existing.update(payload);
-        const full = await MediaOrigin.findByPk(existing.id, {
-            include: [{ model: MediaVariant }],
-        });
-
-        return res.json({ success: true, data: mapOrigin(full) });
-    } catch (err) {
-        console.error("upsertTitleMediaOriginByPurpose error:", err);
-        return res.status(500).json({ success: false, message: "Lỗi server" });
-    }
-};
-
-// DELETE /api/admin/media-origins/:originId
-export const deleteMediaOrigin = async (req, res) => {
-    try {
-        const origin = await MediaOrigin.findByPk(req.params.originId);
-        if (!origin) {
-            return res.status(404).json({ success: false, message: "Không tìm thấy origin" });
-        }
-
-        await MediaVariant.destroy({ where: { origin_id: origin.id } });
-        await origin.destroy();
-
-        return res.json({ success: true, message: "Đã xóa origin" });
-    } catch (err) {
-        console.error("deleteMediaOrigin error:", err);
-        return res.status(500).json({ success: false, message: "Lỗi server" });
-    }
-};
-
-// POST /api/admin/media-origins/:originId/variants
-export const addMediaVariant = async (req, res) => {
-    try {
-        const origin = await MediaOrigin.findByPk(req.params.originId);
-        if (!origin) {
-            return res.status(404).json({ success: false, message: "Không tìm thấy origin" });
-        }
-
-        const { quality, required_tier, bitrate_kbps } = req.body || {};
-        if (!quality) {
-            return res.status(400).json({ success: false, message: "quality là bắt buộc" });
-        }
-        if (!required_tier) {
-            return res.status(400).json({ success: false, message: "required_tier là bắt buộc" });
-        }
-
-        const created = await MediaVariant.create({
-            origin_id: origin.id,
-            quality,
-            required_tier,
-            bitrate_kbps: bitrate_kbps ?? null,
-        });
-
-        return res.status(201).json({ success: true, data: created });
-    } catch (err) {
-        if (err?.name === "SequelizeUniqueConstraintError") {
-            return res.status(409).json({
-                success: false,
-                message: "Variant quality đã tồn tại trong origin này",
-            });
-        }
-        console.error("addMediaVariant error:", err);
-        return res.status(500).json({ success: false, message: "Lỗi server" });
-    }
-};
-
-// PUT /api/admin/media-variants/:id
-export const updateMediaVariant = async (req, res) => {
-    try {
-        const variant = await MediaVariant.findByPk(req.params.id);
-        if (!variant) {
-            return res.status(404).json({ success: false, message: "Không tìm thấy variant" });
-        }
-
-        const { quality, required_tier, bitrate_kbps } = req.body || {};
-        const payload = {};
-        if (quality !== undefined) payload.quality = quality;
-        if (required_tier !== undefined) payload.required_tier = required_tier;
-        if (bitrate_kbps !== undefined) payload.bitrate_kbps = bitrate_kbps;
-
-        await variant.update(payload);
-        return res.json({ success: true, data: variant });
-    } catch (err) {
-        if (err?.name === "SequelizeUniqueConstraintError") {
-            return res.status(409).json({
-                success: false,
-                message: "Variant quality bị trùng trong origin",
-            });
-        }
-        console.error("updateMediaVariant error:", err);
-        return res.status(500).json({ success: false, message: "Lỗi server" });
-    }
-};
-
-// DELETE /api/admin/media-variants/:id
-export const deleteMediaVariant = async (req, res) => {
-    try {
-        const variant = await MediaVariant.findByPk(req.params.id);
-        if (!variant) {
-            return res.status(404).json({ success: false, message: "Không tìm thấy variant" });
-        }
-
-        await variant.destroy();
-        return res.json({ success: true, message: "Đã xóa variant" });
-    } catch (err) {
-        console.error("deleteMediaVariant error:", err);
         return res.status(500).json({ success: false, message: "Lỗi server" });
     }
 };

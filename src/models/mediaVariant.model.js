@@ -22,6 +22,11 @@ export default (sequelize, DataTypes) => {
                 defaultValue: "free",
             },
             bitrate_kbps: { type: DataTypes.INTEGER },
+            playlist_url: { type: DataTypes.STRING(500), allowNull: true },
+            width: { type: DataTypes.INTEGER, allowNull: true },
+            height: { type: DataTypes.INTEGER, allowNull: true },
+            codec_video: { type: DataTypes.STRING(64), allowNull: true },
+            codec_audio: { type: DataTypes.STRING(64), allowNull: true },
         },
         {
             tableName: "media_variants",

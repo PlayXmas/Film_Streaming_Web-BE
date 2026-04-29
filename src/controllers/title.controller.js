@@ -13,6 +13,11 @@ import {
     User,
 } from "../models/index.js";
 import { Op } from "sequelize";
+import {
+    buildProtectedVariantPlaylistPath,
+    filterVariantsForTier,
+    resolvePlaybackUrl,
+} from "../services/mediaPlayback.service.js";
 
 // GET /api/movies, đã có sort toprated và trending
 export const getMovies = async (req, res, next) => {
@@ -583,11 +588,20 @@ export const getTitleMedia = async (req, res) => {
                 scope_id: scopeId,
                 purpose: "content",
                 is_active: true,
+                processing_status: "ready",
             },
             include: [
                 {
                     model: MediaVariant,
-                    attributes: ["id", "quality", "required_tier", "bitrate_kbps"],
+                    attributes: [
+                        "id",
+                        "quality",
+                        "required_tier",
+                        "bitrate_kbps",
+                        "playlist_url",
+                        "width",
+                        "height",
+                    ],
                 },
             ],
             order: [
@@ -611,10 +625,7 @@ export const getTitleMedia = async (req, res) => {
         const media = origins.map((originInstance) => {
             const origin = originInstance.toJSON();
 
-            const allowedVariants = (origin.MediaVariants || []).filter((v) => {
-                if (v.required_tier === "free") return true;
-                return userTier === "vip";
-            });
+            const allowedVariants = filterVariantsForTier(origin.MediaVariants || [], userTier);
 
             return {
                 id: origin.id,
@@ -622,12 +633,19 @@ export const getTitleMedia = async (req, res) => {
                 delivery: origin.delivery,
                 audioType: origin.audio_type,
                 hasSubtitles: origin.has_subtitles,
-                url: origin.url,
+                url: resolvePlaybackUrl(origin),
+                processingStatus: origin.processing_status,
                 variants: allowedVariants.map((v) => ({
                     id: v.id,
                     quality: v.quality,
                     requiredTier: v.required_tier,
                     bitrateKbps: v.bitrate_kbps,
+                    playlistUrl:
+                        origin.delivery === "HLS"
+                            ? buildProtectedVariantPlaylistPath(origin.id, v.quality)
+                            : v.playlist_url ?? null,
+                    width: v.width ?? null,
+                    height: v.height ?? null,
                 })),
             };
         });
@@ -817,11 +835,20 @@ export const getTitlePlay = async (req, res) => {
                 scope_id: scopeId,
                 purpose,
                 is_active: true,
+                processing_status: "ready",
             },
             include: [
                 {
                     model: MediaVariant,
-                    attributes: ["id", "quality", "required_tier", "bitrate_kbps"],
+                    attributes: [
+                        "id",
+                        "quality",
+                        "required_tier",
+                        "bitrate_kbps",
+                        "playlist_url",
+                        "width",
+                        "height",
+                    ],
                 },
             ],
             order: [
@@ -843,10 +870,7 @@ export const getTitlePlay = async (req, res) => {
         }
 
         const origin = origins[0].toJSON();
-        const allowedVariants = (origin.MediaVariants || []).filter((v) => {
-            if (v.required_tier === "free") return true;
-            return userTier === "vip";
-        });
+        const allowedVariants = filterVariantsForTier(origin.MediaVariants || [], userTier);
 
         let defaultQuality = null;
         if (allowedVariants.length) {
@@ -858,13 +882,20 @@ export const getTitlePlay = async (req, res) => {
             success: true,
             data: {
                 delivery: origin.delivery,
-                url: origin.url,
+                url: resolvePlaybackUrl(origin),
                 origin_id: origin.id,
+                processing_status: origin.processing_status,
                 provider: origin.provider ?? null,
                 variants: allowedVariants.map((v) => ({
                     quality: v.quality,
                     required_tier: v.required_tier,
                     bitrate_kbps: v.bitrate_kbps ?? null,
+                    playlist_url:
+                        origin.delivery === "HLS"
+                            ? buildProtectedVariantPlaylistPath(origin.id, v.quality)
+                            : v.playlist_url ?? null,
+                    width: v.width ?? null,
+                    height: v.height ?? null,
                 })),
                 default_quality: defaultQuality,
                 episode: resolvedEpisode,
@@ -921,11 +952,20 @@ export const getTitleTrailer = async (req, res) => {
                 scope_id: id,
                 purpose: "trailer",   // <--- trailer
                 is_active: true,
+                processing_status: "ready",
             },
             include: [
                 {
                     model: MediaVariant,
-                    attributes: ["id", "quality", "required_tier", "bitrate_kbps"],
+                    attributes: [
+                        "id",
+                        "quality",
+                        "required_tier",
+                        "bitrate_kbps",
+                        "playlist_url",
+                        "width",
+                        "height",
+                    ],
                 },
             ],
             order: [
@@ -949,12 +989,19 @@ export const getTitleTrailer = async (req, res) => {
                 delivery: origin.delivery,
                 audioType: origin.audio_type,
                 hasSubtitles: origin.has_subtitles,
-                url: origin.url,
+                url: resolvePlaybackUrl(origin),
+                processingStatus: origin.processing_status,
                 variants: (origin.MediaVariants || []).map((v) => ({
                     id: v.id,
                     quality: v.quality,
                     requiredTier: v.required_tier,
                     bitrateKbps: v.bitrate_kbps,
+                    playlistUrl:
+                        origin.delivery === "HLS"
+                            ? buildProtectedVariantPlaylistPath(origin.id, v.quality)
+                            : v.playlist_url ?? null,
+                    width: v.width ?? null,
+                    height: v.height ?? null,
                 })),
             };
         });

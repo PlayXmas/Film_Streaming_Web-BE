@@ -1,9 +1,290 @@
 // src/controllers/watchHistory.controller.js
-import { WatchHistory, Title, Episode } from "../models/index.js";
+import {
+    Episode,
+    MediaOrigin,
+    MediaVariant,
+    PlaybackEvent,
+    Season,
+    Title,
+    WatchHistory,
+    sequelize,
+} from "../models/index.js";
 import { Op } from "sequelize";
 
+const PLAYBACK_EVENT_TYPES = new Set([
+    "start",
+    "heartbeat",
+    "pause",
+    "seek",
+    "resume",
+    "ended",
+    "quality_change",
+    "error",
+]);
+
+function toPositiveInt(value) {
+    if (value == null || value === "") return null;
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
+function toNonNegativeNumber(value) {
+    if (value == null || value === "") return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return parsed;
+}
+
+function toBooleanOrDefault(value, defaultValue = false) {
+    if (typeof value === "boolean") return value;
+    return defaultValue;
+}
+
+function computeProgressPercent(currentTimeSec, durationSec) {
+    if (!Number.isFinite(currentTimeSec) || !Number.isFinite(durationSec) || durationSec <= 0) {
+        return null;
+    }
+
+    return Math.min(100, Math.max(0, Math.round((currentTimeSec / durationSec) * 100)));
+}
+
+async function validatePlaybackContext({ titleId, episodeId, originId, variantId, transaction }) {
+    const title = await Title.findByPk(titleId, {
+        attributes: ["id", "type"],
+        transaction,
+    });
+    if (!title) {
+        return { error: { status: 404, message: "Không tìm thấy title" } };
+    }
+
+    let episode = null;
+    if (episodeId) {
+        episode = await Episode.findOne({
+            where: { id: episodeId },
+            attributes: ["id", "season_id"],
+            include: [
+                {
+                    model: Season,
+                    attributes: ["id", "title_id"],
+                },
+            ],
+            transaction,
+        });
+
+        if (!episode || Number(episode.Season?.title_id) !== Number(titleId)) {
+            return { error: { status: 404, message: "Episode không tồn tại hoặc không thuộc title này" } };
+        }
+    }
+
+    let origin = null;
+    if (originId) {
+        origin = await MediaOrigin.findByPk(originId, {
+            attributes: ["id", "scope_type", "scope_id"],
+            transaction,
+        });
+
+        if (!origin) {
+            return { error: { status: 404, message: "Không tìm thấy media origin" } };
+        }
+
+        const expectedScopeType = episode ? "episode" : "title";
+        const expectedScopeId = episode ? episode.id : title.id;
+        if (origin.scope_type !== expectedScopeType || Number(origin.scope_id) !== Number(expectedScopeId)) {
+            return { error: { status: 400, message: "origin_id không khớp với title/episode đang xem" } };
+        }
+    }
+
+    if (variantId) {
+        if (!origin) {
+            return { error: { status: 400, message: "originId là bắt buộc khi gửi variantId" } };
+        }
+
+        const variant = await MediaVariant.findOne({
+            where: { id: variantId, origin_id: origin.id },
+            attributes: ["id"],
+            transaction,
+        });
+
+        if (!variant) {
+            return { error: { status: 404, message: "variantId không tồn tại hoặc không thuộc originId" } };
+        }
+    }
+
+    return { title, episode, origin };
+}
+
+async function upsertWatchHistorySnapshot({
+    userId,
+    titleId,
+    episodeId,
+    currentTimeSec,
+    durationSec,
+    progressPercent,
+    isFinished,
+    transaction,
+}) {
+    const where = {
+        user_id: userId,
+        title_id: titleId,
+        episode_id: episodeId ?? null,
+    };
+
+    const finished =
+        typeof isFinished === "boolean" ? isFinished : progressPercent != null ? progressPercent >= 90 : false;
+
+    let record = await WatchHistory.findOne({ where, transaction });
+    if (!record) {
+        record = await WatchHistory.create(
+            {
+                ...where,
+                current_time_sec: currentTimeSec,
+                duration_sec: durationSec,
+                progress_percent: progressPercent ?? 0,
+                is_finished: finished,
+                last_watched_at: new Date(),
+            },
+            { transaction }
+        );
+    } else {
+        await record.update(
+            {
+                current_time_sec: currentTimeSec,
+                duration_sec: durationSec,
+                progress_percent: progressPercent ?? record.progress_percent ?? 0,
+                is_finished: finished,
+                last_watched_at: new Date(),
+            },
+            { transaction }
+        );
+    }
+
+    return record;
+}
+
+export const createPlaybackEvent = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Chưa đăng nhập",
+            });
+        }
+
+        const titleId = toPositiveInt(req.body?.titleId);
+        const episodeId = toPositiveInt(req.body?.episodeId);
+        const originId = toPositiveInt(req.body?.originId);
+        const variantId = toPositiveInt(req.body?.variantId);
+        const sessionId = String(req.body?.sessionId || "").trim() || null;
+        const eventType = String(req.body?.eventType || "heartbeat")
+            .trim()
+            .toLowerCase();
+        const playerTimeSec = toNonNegativeNumber(req.body?.playerTimeSec ?? req.body?.currentTime);
+        const durationSec = toNonNegativeNumber(req.body?.durationSec ?? req.body?.duration);
+        const playbackRate = toNonNegativeNumber(req.body?.playbackRate);
+        const volume = toNonNegativeNumber(req.body?.volume);
+        const quality = String(req.body?.quality || "").trim() || null;
+        const isMuted = toBooleanOrDefault(req.body?.isMuted, false);
+        const isFinished = typeof req.body?.isFinished === "boolean" ? req.body.isFinished : eventType === "ended";
+        const eventAt = req.body?.eventAt ? new Date(req.body.eventAt) : new Date();
+        const meta = req.body?.meta && typeof req.body.meta === "object" ? req.body.meta : null;
+
+        if (!titleId) {
+            return res.status(400).json({
+                success: false,
+                message: "titleId là bắt buộc",
+            });
+        }
+
+        if (!PLAYBACK_EVENT_TYPES.has(eventType)) {
+            return res.status(400).json({
+                success: false,
+                message: "eventType không hợp lệ",
+            });
+        }
+
+        if (req.body?.eventAt && Number.isNaN(eventAt.getTime())) {
+            return res.status(400).json({
+                success: false,
+                message: "eventAt không hợp lệ",
+            });
+        }
+
+        const progressPercent = computeProgressPercent(playerTimeSec, durationSec);
+
+        const result = await sequelize.transaction(async (transaction) => {
+            const context = await validatePlaybackContext({
+                titleId,
+                episodeId,
+                originId,
+                variantId,
+                transaction,
+            });
+
+            if (context.error) {
+                const error = new Error(context.error.message);
+                error.status = context.error.status;
+                throw error;
+            }
+
+            const event = await PlaybackEvent.create(
+                {
+                    user_id: userId,
+                    title_id: titleId,
+                    episode_id: episodeId,
+                    origin_id: originId,
+                    variant_id: variantId,
+                    session_id: sessionId,
+                    event_type: eventType,
+                    player_time_sec: playerTimeSec,
+                    duration_sec: durationSec,
+                    progress_percent: progressPercent,
+                    playback_rate: playbackRate,
+                    quality,
+                    volume,
+                    is_muted: isMuted,
+                    event_at: eventAt,
+                    meta,
+                },
+                { transaction }
+            );
+
+            let history = null;
+            if (playerTimeSec != null && durationSec != null) {
+                history = await upsertWatchHistorySnapshot({
+                    userId,
+                    titleId,
+                    episodeId,
+                    currentTimeSec: playerTimeSec,
+                    durationSec,
+                    progressPercent,
+                    isFinished,
+                    transaction,
+                });
+            }
+
+            return { event, history };
+        });
+
+        return res.status(201).json({
+            success: true,
+            data: {
+                event: result.event,
+                watch_history: result.history,
+            },
+        });
+    } catch (error) {
+        console.error("[POST /api/users/playback-events] ERROR:", error);
+        return res.status(error.status || 500).json({
+            success: false,
+            message: error.status ? error.message : "Lỗi server khi lưu playback event",
+        });
+    }
+};
+
 /**
- * PUT /api/me/watch-history
+ * PUT /api/users/watch-history
  * Body:
  * {
  *   "titleId": 1,
@@ -15,7 +296,7 @@ import { Op } from "sequelize";
  */
 export const updateMyWatchHistory = async (req, res) => {
     try {
-        const userId = req.user?.id; // lấy từ auth.middleware
+        const userId = req.user?.id;
         if (!userId) {
             return res.status(401).json({
                 success: false,
@@ -32,16 +313,16 @@ export const updateMyWatchHistory = async (req, res) => {
             });
         }
 
-        const titleIdNum = Number(titleId);
-        const episodeIdNum = episodeId ? Number(episodeId) : null;
-        const currentTimeNum = Number(currentTime);
-        const durationNum = Number(duration);
+        const titleIdNum = toPositiveInt(titleId);
+        const episodeIdNum = toPositiveInt(episodeId);
+        const currentTimeNum = toNonNegativeNumber(currentTime);
+        const durationNum = toNonNegativeNumber(duration);
 
         if (
-            Number.isNaN(titleIdNum) ||
-            (episodeId && Number.isNaN(episodeIdNum)) ||
-            Number.isNaN(currentTimeNum) ||
-            Number.isNaN(durationNum)
+            !titleIdNum ||
+            (episodeId != null && episodeId !== "" && !episodeIdNum) ||
+            currentTimeNum == null ||
+            durationNum == null
         ) {
             return res.status(400).json({
                 success: false,
@@ -49,50 +330,37 @@ export const updateMyWatchHistory = async (req, res) => {
             });
         }
 
-        const progressPercent = Math.min(
-            100,
-            Math.max(0, Math.round((currentTimeNum / durationNum) * 100))
-        );
+        const progressPercent = computeProgressPercent(currentTimeNum, durationNum);
 
-        const finished =
-            typeof isFinished === "boolean" ? isFinished : progressPercent >= 90;
+        const context = await validatePlaybackContext({
+            titleId: titleIdNum,
+            episodeId: episodeIdNum,
+            originId: null,
+            variantId: null,
+            transaction: null,
+        });
 
-        const now = new Date();
-
-        // Giả định các cột trong bảng watch_history:
-        // user_id, title_id, episode_id, current_time_sec, duration_sec,
-        // progress_percent, is_finished, last_watched_at
-        const where = {
-            user_id: userId,
-            title_id: titleIdNum,
-            episode_id: episodeIdNum ?? null,
-        };
-
-        let record = await WatchHistory.findOne({ where });
-
-        if (!record) {
-            record = await WatchHistory.create({
-                user_id: userId,
-                title_id: titleIdNum,
-                episode_id: episodeIdNum ?? null,
-                current_time_sec: currentTimeNum,
-                duration_sec: durationNum,
-                progress_percent: progressPercent,
-                is_finished: finished,
-                last_watched_at: now,
-            });
-        } else {
-            await record.update({
-                current_time_sec: currentTimeNum,
-                duration_sec: durationNum,
-                progress_percent: progressPercent,
-                is_finished: finished,
-                last_watched_at: now,
+        if (context.error) {
+            return res.status(context.error.status).json({
+                success: false,
+                message: context.error.message,
             });
         }
 
+        const record = await upsertWatchHistorySnapshot({
+            userId,
+            titleId: titleIdNum,
+            episodeId: episodeIdNum,
+            currentTimeSec: currentTimeNum,
+            durationSec: durationNum,
+            progressPercent,
+            isFinished,
+            transaction: null,
+        });
+
         return res.status(200).json({
             success: true,
+            message: "Đã cập nhật watch history. Khuyến nghị FE dùng POST /api/users/playback-events cho luồng xem phim mới.",
             data: record,
         });
     } catch (error) {
