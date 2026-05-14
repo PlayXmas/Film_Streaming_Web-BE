@@ -24,20 +24,20 @@ function shouldClearExpiry(user, hasValidVip) {
     return !!user.vip_expires_at;
 }
 
-export async function syncUserVipAccess(user, options = {}) {
-    if (!user) return user;
-    if (user.role === "admin") return user;
+export function applyEffectiveVipAccess(user, options = {}) {
+    if (!user || user.role === "admin") {
+        return false;
+    }
 
     const now = options.now instanceof Date ? options.now : new Date();
     const hasValidVip = isStrictlyFuture(user.vip_expires_at, now);
     const nextRole = hasValidVip ? "vip" : "free";
     const nextVipExpiresAt = hasValidVip ? normalizeDate(user.vip_expires_at) : null;
-
     const shouldUpdateRole = user.role !== nextRole;
     const shouldUpdateExpiry = shouldClearExpiry(user, hasValidVip);
 
     if (!shouldUpdateRole && !shouldUpdateExpiry) {
-        return user;
+        return false;
     }
 
     user.role = nextRole;
@@ -45,6 +45,17 @@ export async function syncUserVipAccess(user, options = {}) {
         user.vip_expires_at = null;
     } else if (nextVipExpiresAt) {
         user.vip_expires_at = nextVipExpiresAt;
+    }
+
+    return true;
+}
+
+export async function syncUserVipAccess(user, options = {}) {
+    if (!user) return user;
+
+    const changed = applyEffectiveVipAccess(user, options);
+    if (!changed) {
+        return user;
     }
 
     await user.save({

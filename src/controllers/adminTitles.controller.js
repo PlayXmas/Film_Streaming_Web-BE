@@ -103,12 +103,6 @@ function normalizeUrl(value) {
     return trimmed ? trimmed : null;
 }
 
-function normalizeText(value) {
-    if (value === undefined || value === null) return undefined;
-    const trimmed = String(value).trim();
-    return trimmed ? trimmed : undefined;
-}
-
 function normalizeNullableText(value) {
     if (value === undefined) return undefined;
     if (value === null) return null;

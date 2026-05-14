@@ -1,6 +1,8 @@
 // src/controllers/review.controller.js
 import { Review, User, Episode, Season, Title } from "../models/index.js";
 
+const MAX_PUBLIC_PAGE_LIMIT = 50;
+
 // GET /api/reviews/episode/:id?page=&limit=
 export const getEpisodeReviews = async (req, res, next) => {
     try {
@@ -19,7 +21,10 @@ export const getEpisodeReviews = async (req, res, next) => {
             parseInt(req.query.limit, 10) || parseInt(req.query.pageSize, 10);
 
         const page = Number.isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw;
-        const limit = Number.isNaN(limitRaw) || limitRaw < 1 ? 10 : limitRaw;
+        const limit =
+            Number.isNaN(limitRaw) || limitRaw < 1
+                ? 10
+                : Math.min(limitRaw, MAX_PUBLIC_PAGE_LIMIT);
         const offset = (page - 1) * limit;
 
         const { rows, count } = await Review.findAndCountAll({
@@ -149,7 +154,10 @@ export const getTitleReviews = async (req, res, next) => {
             parseInt(req.query.limit, 10) || parseInt(req.query.pageSize, 10);
 
         const page = Number.isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw;
-        const limit = Number.isNaN(limitRaw) || limitRaw < 1 ? 10 : limitRaw;
+        const limit =
+            Number.isNaN(limitRaw) || limitRaw < 1
+                ? 10
+                : Math.min(limitRaw, MAX_PUBLIC_PAGE_LIMIT);
         const offset = (page - 1) * limit;
 
         const { rows, count } = await Review.findAndCountAll({

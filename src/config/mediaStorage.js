@@ -1,3 +1,4 @@
+import "../bootstrap.js";
 import fs from "fs";
 import path from "path";
 
@@ -33,10 +34,6 @@ export function getOriginVariantDir(originId, quality) {
     return path.join(getOriginHlsDir(originId), String(quality));
 }
 
-export function getUploadsRoot() {
-    return uploadsRoot;
-}
-
 export function toUploadsUrl(absolutePath) {
     const relative = path.relative(uploadsRoot, absolutePath);
     if (!relative || relative.startsWith("..")) {
@@ -59,9 +56,4 @@ export function uploadsUrlToAbsolutePath(urlPath) {
     }
 
     return absolute;
-}
-
-export function buildPublicUrl(req, relativePath) {
-    const base = `${req.protocol}://${req.get("host")}`;
-    return new URL(relativePath, `${base}/`).toString();
 }

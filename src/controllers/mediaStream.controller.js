@@ -2,11 +2,12 @@ import fs from "fs/promises";
 import path from "path";
 import { Episode, MediaOrigin, MediaVariant, Season, Title } from "../models/index.js";
 import {
-    buildProtectedVariantPlaylistPath,
     filterVariantsForTier,
     getUserPlaybackTier,
 } from "../services/mediaPlayback.service.js";
-import { buildPublicUrl, uploadsUrlToAbsolutePath } from "../config/mediaStorage.js";
+import {
+    uploadsUrlToAbsolutePath,
+} from "../config/mediaStorage.js";
 
 async function assertOriginAccess(origin, userTier) {
     if (origin.scope_type === "title") {
@@ -61,7 +62,7 @@ async function assertOriginAccess(origin, userTier) {
     return { status: 400, message: "Origin không hỗ trợ stream protected" };
 }
 
-function buildMasterManifest(req, origin, variants) {
+function buildMasterManifest(origin, variants) {
     const sortedVariants = [...variants].sort((a, b) => {
         const heightA = Number(a.height || 0);
         const heightB = Number(b.height || 0);
@@ -79,7 +80,7 @@ function buildMasterManifest(req, origin, variants) {
         const bandwidth = Math.max(1, Number(variant.bitrate_kbps || 0) * 1000);
         const resolution =
             variant.width && variant.height ? `${variant.width}x${variant.height}` : null;
-        const streamPath = buildProtectedVariantPlaylistPath(origin.id, variant.quality);
+        const qualityPath = `${encodeURIComponent(String(variant.quality || "").trim())}/index.m3u8`;
 
         lines.push(
             [
@@ -93,16 +94,14 @@ function buildMasterManifest(req, origin, variants) {
                 .filter(Boolean)
                 .join(",")
         );
-        lines.push(buildPublicUrl(req, streamPath));
+        lines.push(qualityPath);
     }
 
     lines.push("");
     return lines.join("\n");
 }
 
-function rewritePlaylistText(req, playlistUrl, content) {
-    const baseDir = path.posix.dirname(String(playlistUrl || "").replace(/\\/g, "/"));
-
+function rewritePlaylistText(content) {
     return String(content || "")
         .split(/\r?\n/)
         .map((line) => {
@@ -113,13 +112,30 @@ function rewritePlaylistText(req, playlistUrl, content) {
             if (/^(https?:)?\/\//i.test(trimmed)) {
                 return trimmed;
             }
-            if (trimmed.startsWith("/")) {
-                return buildPublicUrl(req, trimmed);
-            }
 
-            return buildPublicUrl(req, path.posix.join(baseDir, trimmed));
+            return `assets/${encodeURIComponent(trimmed)}`;
         })
         .join("\n");
+}
+
+function setPrivateMediaCacheHeaders(res) {
+    res.setHeader("Cache-Control", "private, no-store, max-age=0");
+}
+
+function normalizeAssetName(value) {
+    const assetName = String(value || "").trim();
+    if (!assetName) return null;
+    if (assetName.includes("/") || assetName.includes("\\")) return null;
+    if (!/^[A-Za-z0-9._-]+$/.test(assetName)) return null;
+    return assetName;
+}
+
+function getMediaAssetContentType(assetName) {
+    const extension = path.extname(assetName).toLowerCase();
+    if (extension === ".ts") return "video/mp2t";
+    if (extension === ".m4s") return "video/iso.segment";
+    if (extension === ".mp4") return "video/mp4";
+    return "application/octet-stream";
 }
 
 async function findReadyOrigin(originId) {
@@ -163,8 +179,9 @@ export const getProtectedMasterPlaylist = async (req, res) => {
             });
         }
 
+        setPrivateMediaCacheHeaders(res);
         res.setHeader("Content-Type", "application/vnd.apple.mpegurl; charset=utf-8");
-        return res.status(200).send(buildMasterManifest(req, origin, allowedVariants));
+        return res.status(200).send(buildMasterManifest(origin, allowedVariants));
     } catch (error) {
         console.error("getProtectedMasterPlaylist error:", error);
         return res.status(500).json({ success: false, message: "Lỗi server khi tạo master playlist" });
@@ -202,12 +219,77 @@ export const getProtectedVariantPlaylist = async (req, res) => {
 
         const absolutePath = uploadsUrlToAbsolutePath(variant.playlist_url);
         const content = await fs.readFile(absolutePath, "utf8");
-        const rewritten = rewritePlaylistText(req, variant.playlist_url, content);
+        const rewritten = rewritePlaylistText(content);
 
+        setPrivateMediaCacheHeaders(res);
         res.setHeader("Content-Type", "application/vnd.apple.mpegurl; charset=utf-8");
         return res.status(200).send(rewritten);
     } catch (error) {
         console.error("getProtectedVariantPlaylist error:", error);
         return res.status(500).json({ success: false, message: "Lỗi server khi đọc variant playlist" });
+    }
+};
+
+export const getProtectedVariantAsset = async (req, res) => {
+    try {
+        const originId = Number.parseInt(req.params.originId, 10);
+        const quality = String(req.params.quality || "").trim();
+        const assetName = normalizeAssetName(req.params.assetName);
+
+        if (!Number.isInteger(originId) || originId < 1 || !quality || !assetName) {
+            return res.status(400).json({
+                success: false,
+                message: "originId, quality hoặc assetName không hợp lệ",
+            });
+        }
+
+        const origin = await findReadyOrigin(originId);
+        if (!origin) {
+            return res.status(404).json({ success: false, message: "Không tìm thấy stream HLS" });
+        }
+
+        const userTier = getUserPlaybackTier(req.user);
+        const accessError = await assertOriginAccess(origin, userTier);
+        if (accessError) {
+            return res.status(accessError.status).json({
+                success: false,
+                message: accessError.message,
+            });
+        }
+
+        const variant = filterVariantsForTier(origin.MediaVariants || [], userTier).find(
+            (item) => item.quality === quality
+        );
+        if (!variant) {
+            return res.status(404).json({ success: false, message: "Không tìm thấy quality" });
+        }
+
+        const playlistAbsolutePath = uploadsUrlToAbsolutePath(variant.playlist_url);
+        const variantDir = path.dirname(playlistAbsolutePath);
+        const absolutePath = path.resolve(path.join(variantDir, assetName));
+        if (
+            absolutePath !== path.join(variantDir, assetName) ||
+            !absolutePath.startsWith(`${variantDir}${path.sep}`)
+        ) {
+            return res.status(400).json({ success: false, message: "assetName không hợp lệ" });
+        }
+
+        const fileBuffer = await fs.readFile(absolutePath);
+        setPrivateMediaCacheHeaders(res);
+        res.setHeader("Content-Type", getMediaAssetContentType(assetName));
+        return res.status(200).send(fileBuffer);
+    } catch (error) {
+        if (error?.code === "ENOENT") {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy segment media",
+            });
+        }
+
+        console.error("getProtectedVariantAsset error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Lỗi server khi đọc segment media",
+        });
     }
 };

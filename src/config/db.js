@@ -1,8 +1,6 @@
 // src/config/db.js
 import { Sequelize } from "sequelize";
-import dotenv from "dotenv";
-
-dotenv.config();
+import "../bootstrap.js";
 
 const sequelize = new Sequelize(
     process.env.DB_NAME,
@@ -21,15 +19,6 @@ const sequelize = new Sequelize(
         },
     }
 );
-
-export async function testConnection() {
-    try {
-        await sequelize.authenticate();
-        console.log("DB connected successfully");
-    } catch (err) {
-        console.error("DB connection error:", err.message);
-    }
-}
 
 export default sequelize;
 export { sequelize };

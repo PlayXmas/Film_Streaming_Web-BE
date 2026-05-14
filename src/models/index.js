@@ -28,6 +28,7 @@ import reportModel from "./report.model.js";
 import vTitlePublicModel from "./vTitlePublic.model.js";
 import vEpisodeEffectiveAccessModel from "./vEpisodeEffectiveAccess.model.js";
 import userRecommendationModel from "./userRecommendation.model.js";
+import userSearchLogModel from "./userSearchLog.model.js";
 import passwordResetTokenModel from "./passwordResetToken.model.js";
 
 // khởi tạo model
@@ -56,6 +57,7 @@ const Report = reportModel(sequelize, DataTypes);
 const VTitlePublic = vTitlePublicModel(sequelize, DataTypes);
 const VEpisodeEffectiveAccess = vEpisodeEffectiveAccessModel(sequelize, DataTypes);
 const UserRecommendation = userRecommendationModel(sequelize, DataTypes);
+const UserSearchLog = userSearchLogModel(sequelize, DataTypes);
 const PasswordResetToken = passwordResetTokenModel(sequelize, DataTypes);
 
 /* ========== Associations ========== */
@@ -75,6 +77,9 @@ WatchHistory.belongsTo(User, { foreignKey: "user_id" });
 
 User.hasMany(PlaybackEvent, { foreignKey: "user_id" });
 PlaybackEvent.belongsTo(User, { foreignKey: "user_id" });
+
+User.hasMany(UserSearchLog, { foreignKey: "user_id", as: "searchLogs" });
+UserSearchLog.belongsTo(User, { foreignKey: "user_id", as: "user" });
 
 // User - Review
 User.hasMany(Review, { foreignKey: "user_id", as: "reviews" });
@@ -136,6 +141,9 @@ WatchHistory.belongsTo(Title, { foreignKey: "title_id" });
 
 Title.hasMany(PlaybackEvent, { foreignKey: "title_id" });
 PlaybackEvent.belongsTo(Title, { foreignKey: "title_id" });
+
+Title.hasMany(UserSearchLog, { foreignKey: "clicked_title_id", as: "searchClicks" });
+UserSearchLog.belongsTo(Title, { foreignKey: "clicked_title_id", as: "clickedTitle" });
 
 // Episode - history
 Episode.hasMany(WatchHistory, { foreignKey: "episode_id" });
@@ -212,6 +220,7 @@ export {
   PaymentEvent,
   Report,
   UserRecommendation,
+  UserSearchLog,
   PasswordResetToken,
   VTitlePublic,
   VEpisodeEffectiveAccess,

@@ -1,17 +1,8 @@
 // src/services/email.service.js
+import "../bootstrap.js";
 import nodemailer from "nodemailer";
 
-const smtpPort = Number(process.env.SMTP_PORT || 587);
-
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: smtpPort,
-    secure: String(process.env.SMTP_SECURE || "").toLowerCase() === "true" || smtpPort === 465,
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-});
+let transporter = null;
 
 function assertMailConfig() {
     const requiredEnv = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"];
@@ -22,10 +13,33 @@ function assertMailConfig() {
     }
 }
 
-export async function sendPasswordResetCode(toEmail, otpCode) {
+function getSmtpPort() {
+    return Number(process.env.SMTP_PORT || 587);
+}
+
+function getTransporter() {
     assertMailConfig();
 
-    return transporter.sendMail({
+    if (!transporter) {
+        const smtpPort = getSmtpPort();
+        transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: smtpPort,
+            secure:
+                String(process.env.SMTP_SECURE || "").toLowerCase() === "true" ||
+                smtpPort === 465,
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS,
+            },
+        });
+    }
+
+    return transporter;
+}
+
+export async function sendPasswordResetCode(toEmail, otpCode) {
+    return getTransporter().sendMail({
         from: process.env.SMTP_FROM,
         to: toEmail,
         subject: "Ma xac nhan khoi phuc mat khau",

@@ -1,4 +1,5 @@
 // src/controllers/auth.controller.js
+import "../bootstrap.js";
 import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { Op } from "sequelize";
@@ -8,17 +9,18 @@ import { signToken } from "../utils/jwt.util.js";
 import { syncUserVipAccess } from "../services/subscriptionAccess.service.js";
 import { sendPasswordResetCode } from "../services/email.service.js";
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "";
 const USER_ALLOWED_ROLES = ["free", "vip"];
 const USER_LOGIN_ROLE_ERROR = "Tài khoản admin không thể đăng nhập vào trang người dùng";
-const googleOAuthClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 const USER_DISPLAY_NAME_MAX_LENGTH = 120;
 const USER_AVATAR_URL_MAX_LENGTH = 255;
 const USER_GOOGLE_ID_MAX_LENGTH = 64;
 const PASSWORD_RESET_EXPIRES_MINUTES = 15;
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_RESEND_COOLDOWN_SECONDS = 60;
 const PASSWORD_RESET_REQUEST_MESSAGE =
     "Nếu email tồn tại, mã xác thực đã được gửi đến email của bạn";
+
+let googleOAuthClient = null;
 
 function createHttpError(message, status) {
     const error = new Error(message);
@@ -106,18 +108,22 @@ function validateUserRoleForLogin(user, allowedRoles, roleErrorMessage) {
 }
 
 async function verifyGoogleIdToken(idToken) {
-    if (!GOOGLE_CLIENT_ID) {
+    const googleClientId = String(
+        process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || ""
+    ).trim();
+
+    if (!googleClientId) {
         throw createHttpError("GOOGLE_CLIENT_ID is not configured", 500);
     }
     if (!googleOAuthClient) {
-        throw createHttpError("Google OAuth client is not initialized", 500);
+        googleOAuthClient = new OAuth2Client(googleClientId);
     }
 
     let payload;
     try {
         const ticket = await googleOAuthClient.verifyIdToken({
             idToken,
-            audience: GOOGLE_CLIENT_ID,
+            audience: googleClientId,
         });
         payload = ticket.getPayload();
     } catch (err) {
@@ -413,6 +419,30 @@ export const forgotPassword = async (req, res) => {
             });
         }
 
+        const resendCooldownThreshold = new Date(
+            Date.now() - PASSWORD_RESET_RESEND_COOLDOWN_SECONDS * 1000
+        );
+        const recentResetRequest = await PasswordResetToken.findOne({
+            where: {
+                user_id: user.id,
+                used_at: null,
+                revoked_at: null,
+                expires_at: { [Op.gt]: new Date() },
+                created_at: { [Op.gte]: resendCooldownThreshold },
+            },
+            order: [["created_at", "DESC"]],
+        });
+
+        if (recentResetRequest) {
+            return res.status(429).json({
+                success: false,
+                message: "Bạn vừa yêu cầu mã xác thực. Vui lòng thử lại sau.",
+                data: {
+                    retry_after_seconds: PASSWORD_RESET_RESEND_COOLDOWN_SECONDS,
+                },
+            });
+        }
+
         const otpCode = generateOtpCode();
         const codeHash = await hashPassword(otpCode);
 
@@ -682,7 +712,7 @@ const doLogin = (allowedRoles, roleErrorMessage) => async (req, res) => {
 };
 
 // User login: chỉ free/vip
-export const loginUser = doLogin(
+const loginUser = doLogin(
     USER_ALLOWED_ROLES,
     USER_LOGIN_ROLE_ERROR
 );

@@ -1,5 +1,8 @@
 // src/controllers/person.controller.js
 import { Person, Title, Credit } from "../models/index.js";
+import { Op } from "sequelize";
+
+const MAX_PUBLIC_PAGE_LIMIT = 50;
 
 /**
  * GET /api/people/:id
@@ -54,7 +57,10 @@ export const getPersonTitles = async (req, res) => {
         const limitRaw = parseInt(req.query.limit, 10);
 
         const page = Number.isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw;
-        const limit = Number.isNaN(limitRaw) || limitRaw < 1 ? 20 : limitRaw;
+        const limit =
+            Number.isNaN(limitRaw) || limitRaw < 1
+                ? 20
+                : Math.min(limitRaw, MAX_PUBLIC_PAGE_LIMIT);
         const offset = (page - 1) * limit;
 
         // 3. Lấy danh sách phim có personId trong bảng credits (chỉ lấy cast)
@@ -110,7 +116,10 @@ export const getPeople = async (req, res) => {
         const limitRaw = parseInt(req.query.limit, 10);
 
         const page = Number.isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw;
-        const limit = Number.isNaN(limitRaw) || limitRaw < 1 ? 20 : limitRaw;
+        const limit =
+            Number.isNaN(limitRaw) || limitRaw < 1
+                ? 20
+                : Math.min(limitRaw, MAX_PUBLIC_PAGE_LIMIT);
         const offset = (page - 1) * limit;
 
         // 3) Where

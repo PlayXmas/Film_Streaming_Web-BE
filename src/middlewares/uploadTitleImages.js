@@ -1,6 +1,7 @@
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { createValidatedImageUpload } from "./imageUploadFactory.js";
 
 const uploadDir = path.join(process.cwd(), "uploads", "titles");
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -19,7 +20,7 @@ const fileFilter = (req, file, cb) => {
     cb(ok ? null : new Error("Chỉ hỗ trợ JPG/PNG/WEBP"), ok);
 };
 
-export const uploadTitleImages = multer({
+export const uploadTitleImages = createValidatedImageUpload({
     storage,
     fileFilter,
     limits: { fileSize: 5 * 1024 * 1024 },

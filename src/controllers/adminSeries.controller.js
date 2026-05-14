@@ -14,17 +14,6 @@ const MEDIA_PURPOSES = new Set(["content", "trailer"]);
 const EPISODE_SCOPE = "episode";
 const ACCESS_TIERS = new Set(["free", "vip"]);
 
-function parseBoolean(value) {
-    if (typeof value === "boolean") return value;
-    if (typeof value === "number") return value !== 0;
-    if (typeof value === "string") {
-        const normalized = value.trim().toLowerCase();
-        if (["true", "1", "yes"].includes(normalized)) return true;
-        if (["false", "0", "no"].includes(normalized)) return false;
-    }
-    return null;
-}
-
 function normalizeText(value) {
     if (value === undefined) return undefined;
     if (value === null) return null;

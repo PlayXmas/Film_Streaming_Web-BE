@@ -1,3 +1,4 @@
+import "../bootstrap.js";
 import crypto from "node:crypto";
 
 const DEFAULT_TIMEZONE = process.env.VNP_TIMEZONE || "Asia/Ho_Chi_Minh";

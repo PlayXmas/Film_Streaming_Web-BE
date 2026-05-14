@@ -2,6 +2,8 @@
 import { Genre, Title } from "../models/index.js";
 import { Op } from "sequelize";
 
+const MAX_PUBLIC_PAGE_LIMIT = 50;
+
 // GET /api/genres - lấy tất cả thể loại
 export const getGenres = async (req, res) => {
     try {
@@ -64,7 +66,10 @@ export const getGenreMovies = async (req, res) => {
         const limitRaw = parseInt(req.query.limit, 10);
 
         const page = Number.isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw;
-        const limit = Number.isNaN(limitRaw) || limitRaw < 1 ? 20 : limitRaw;
+        const limit =
+            Number.isNaN(limitRaw) || limitRaw < 1
+                ? 20
+                : Math.min(limitRaw, MAX_PUBLIC_PAGE_LIMIT);
         const offset = (page - 1) * limit;
 
         // 3. Filter khác: keyword, year, type, sort

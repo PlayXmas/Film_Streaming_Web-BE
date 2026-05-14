@@ -62,17 +62,6 @@ function normalizeRoleFilter(value) {
     return normalized;
 }
 
-function normalizeRoleValue(value) {
-    const normalized = normalizeNullableString(value)?.toLowerCase() || null;
-    if (!normalized) {
-        throw createServiceError("role không hợp lệ", 400);
-    }
-    if (!USER_ROLE_VALUES.includes(normalized)) {
-        throw createServiceError("role không hợp lệ", 400);
-    }
-    return normalized;
-}
-
 function parseBooleanValue(value, fieldName = "is_active") {
     if (typeof value === "boolean") return value;
     if (typeof value === "number") {

@@ -19,135 +19,237 @@ import {
     resolvePlaybackUrl,
 } from "../services/mediaPlayback.service.js";
 
-// GET /api/movies, đã có sort toprated và trending
+const MAX_PUBLIC_PAGE_LIMIT = 50;
+
+function buildBaseMovieWhere({ year, type }) {
+    const where = {
+        is_public: true,
+    };
+
+    if (year) {
+        where.release_year = year;
+    }
+
+    if (type) {
+        where.type = type;
+    }
+
+    return where;
+}
+
+function buildMovieInclude({ genreId, isSuggest }) {
+    const include = [];
+
+    if (genreId) {
+        include.push({
+            model: Genre,
+            as: "genres",
+            through: { attributes: [] },
+            where: { id: genreId },
+            ...(isSuggest ? { attributes: [] } : {}),
+        });
+    } else if (!isSuggest) {
+        include.push({
+            model: Genre,
+            as: "genres",
+            through: { attributes: [] },
+        });
+    }
+
+    return include;
+}
+
+function buildEmptyMovieListResponse(page, limit) {
+    return {
+        success: true,
+        data: [],
+        pagination: {
+            page,
+            limit,
+            totalPages: 1,
+            totalItems: 0,
+        },
+    };
+}
+
+async function findKeywordMatchedTitleIds({ keyword, year, type }) {
+    const kw = String(keyword || "").trim();
+    if (!kw) return null;
+
+    const likePattern = `%${kw}%`;
+    const rows = await Title.findAll({
+        attributes: ["id"],
+        where: {
+            ...buildBaseMovieWhere({ year, type }),
+            [Op.or]: [
+                { name: { [Op.like]: likePattern } },
+                { original_name: { [Op.like]: likePattern } },
+                { "$genres.name$": { [Op.like]: likePattern } },
+                { "$genres.slug$": { [Op.like]: likePattern } },
+                { "$Credits.Person.name$": { [Op.like]: likePattern } },
+                { "$Credits.Person.also_known_as$": { [Op.like]: likePattern } },
+            ],
+        },
+        include: [
+            {
+                model: Genre,
+                as: "genres",
+                attributes: [],
+                through: { attributes: [] },
+                required: false,
+            },
+            {
+                model: Credit,
+                attributes: [],
+                required: false,
+                include: [
+                    {
+                        model: Person,
+                        attributes: [],
+                        required: false,
+                    },
+                ],
+            },
+        ],
+        raw: true,
+        subQuery: false,
+    });
+
+    return [...new Set(rows.map((row) => row.id).filter(Boolean))];
+}
+
+function parseMoviePagination(query) {
+    const pageRaw = parseInt(query.page, 10);
+    const limitRaw = parseInt(query.limit, 10);
+
+    const page = Number.isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw;
+    const limit =
+        Number.isNaN(limitRaw) || limitRaw < 1
+            ? 20
+            : Math.min(limitRaw, MAX_PUBLIC_PAGE_LIMIT);
+
+    return {
+        page,
+        limit,
+        offset: (page - 1) * limit,
+    };
+}
+
+function buildMovieAttributes(isSuggest) {
+    if (!isSuggest) return undefined;
+
+    return [
+        "id",
+        "type",
+        "slug",
+        "name",
+        "release_year",
+        "poster_url",
+        "backdrop_url",
+        "imdb_score",
+        "popularity",
+        "access_tier",
+    ];
+}
+
+function buildMovieOrder(sort) {
+    const order = [];
+    const sortKey = String(sort || "").toLowerCase();
+
+    switch (sortKey) {
+        case "latest":
+            order.push(["release_year", "DESC"]);
+            break;
+        case "toprated":
+        case "top-rated":
+            order.push(["imdb_score", "DESC"]);
+            break;
+        case "trending":
+            order.push(["popularity", "DESC"]);
+            break;
+        default:
+            order.push(["release_year", "DESC"]);
+            order.push(["id", "DESC"]);
+    }
+
+    return order;
+}
+
+async function queryMovies({
+    keyword,
+    year,
+    type,
+    genreId,
+    sort,
+    isSuggest,
+    page,
+    limit,
+    offset,
+}) {
+    const kw = String(keyword || "").trim();
+    const where = buildBaseMovieWhere({ year, type });
+    const include = buildMovieInclude({ genreId, isSuggest });
+
+    if (kw) {
+        const matchedIds = await findKeywordMatchedTitleIds({
+            keyword: kw,
+            year,
+            type,
+        });
+
+        if (!matchedIds.length) {
+            return buildEmptyMovieListResponse(page, limit);
+        }
+
+        where.id = {
+            [Op.in]: matchedIds,
+        };
+    }
+
+    const result = await Title.findAndCountAll({
+        where,
+        attributes: buildMovieAttributes(isSuggest),
+        include,
+        distinct: true,
+        limit,
+        offset,
+        order: buildMovieOrder(sort),
+    });
+
+    const totalItems = result.count;
+    const totalPages = Math.max(Math.ceil(totalItems / limit), 1);
+
+    return {
+        success: true,
+        data: result.rows,
+        pagination: {
+            page,
+            limit,
+            totalPages,
+            totalItems,
+        },
+    };
+}
+
+// GET /api/movies, chỉ dùng cho listing/filter
 export const getMovies = async (req, res, next) => {
     try {
-        // 1. Pagination
-        const pageRaw = parseInt(req.query.page, 10);
-        const limitRaw = parseInt(req.query.limit, 10);
-
-        const page = Number.isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw;
-        const limit = Number.isNaN(limitRaw) || limitRaw < 1 ? 20 : limitRaw;
-        const offset = (page - 1) * limit;
-
-        // suggest mode (dùng cho dropdown search ở header)
-        // gọi: /api/movies?suggest=1&keyword=...&limit=10&page=1
+        const { page, limit, offset } = parseMoviePagination(req.query);
+        const { year, type, genreId, sort } = req.query;
         const isSuggest = String(req.query.suggest || "") === "1";
 
-        // 2. Query params
-        const { keyword, year, type, genreId, sort } = req.query;
-
-        // 3. WHERE: chỉ lấy nội dung public
-        const where = {
-            is_public: true,
-        };
-
-        // tìm theo tên phim
-        const kw = (keyword || "").trim();
-        if (kw) {
-            // tìm theo cột "name" (tên phim)
-            where.name = {
-                [Op.like]: `%${kw}%`,
-            };
-        }
-
-        // lọc theo năm phát hành
-        if (year) {
-            where.release_year = year;
-        }
-
-        // lọc theo type: movie / series
-        if (type) {
-            where.type = type; // ENUM("movie", "series")
-        }
-
-        //NEW: attributes nhẹ cho suggest (autocomplete)
-        // các mode khác giữ nguyên (trả full columns như trước)
-        const attributes = isSuggest
-            ? [
-                "id",
-                "type",
-                "slug",
-                "name",
-                "release_year",
-                "poster_url",
-                "backdrop_url",
-                "imdb_score",
-                "popularity",
-                "access_tier",
-            ]
-            : undefined;
-
-        // 4. Include genres
-        const include = [];
-
-        // NEW: nếu suggest thì mặc định KHÔNG join genres (nhanh hơn)
-        // nhưng nếu có genreId thì vẫn join để filter đúng như cũ
-        if (genreId) {
-            include.push({
-                model: Genre,
-                as: "genres",
-                through: { attributes: [] },
-                where: { id: genreId },
-                // suggest thì không cần trả genres về (nhẹ hơn)
-                ...(isSuggest ? { attributes: [] } : {}),
-            });
-        } else if (!isSuggest) {
-            // giữ nguyên behavior cũ: không có genreId thì vẫn include genres
-            include.push({
-                model: Genre,
-                as: "genres",
-                through: { attributes: [] },
-            });
-        }
-
-        // 5. Sort
-        const order = [];
-        const sortKey = (sort || "").toLowerCase();
-
-        switch (sortKey) {
-            case "latest":
-                order.push(["release_year", "DESC"]);
-                break;
-            case "toprated":
-            case "top-rated":
-                // dùng điểm imdb_score
-                order.push(["imdb_score", "DESC"]);
-                break;
-            case "trending":
-                // dùng độ phổ biến popularity
-                order.push(["popularity", "DESC"]);
-                break;
-            default:
-                order.push(["release_year", "DESC"]);
-                order.push(["id", "DESC"]);
-        }
-
-        // 6. Query DB (find + count)
-        const result = await Title.findAndCountAll({
-            where,
-            attributes,
-            include,
-            distinct: true, // để count đúng khi join nhiều bảng
+        const payload = await queryMovies({
+            year,
+            type,
+            genreId,
+            sort,
+            isSuggest,
+            page,
             limit,
             offset,
-            order,
         });
 
-        const totalItems = result.count;
-        const totalPages = Math.max(Math.ceil(totalItems / limit), 1);
-
-        // 7. Response
-        return res.status(200).json({
-            success: true,
-            data: result.rows,
-            pagination: {
-                page,
-                limit,
-                totalPages,
-                totalItems,
-            },
-        });
+        return res.status(200).json(payload);
     } catch (error) {
         console.error("[GET /api/movies] DB ERROR:", {
             message: error.message,
@@ -161,6 +263,52 @@ export const getMovies = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             message: "Lỗi server khi lấy danh sách phim",
+            error: error.parent?.sqlMessage || error.message,
+        });
+    }
+};
+
+// GET /api/movies/search?keyword=anime
+export const searchMovies = async (req, res) => {
+    try {
+        const keyword = String(req.query.keyword || "").trim();
+        if (!keyword) {
+            return res.status(400).json({
+                success: false,
+                message: "keyword là bắt buộc",
+            });
+        }
+
+        const { page, limit, offset } = parseMoviePagination(req.query);
+        const { year, type, genreId, sort } = req.query;
+        const isSuggest = String(req.query.suggest || "") === "1";
+
+        const payload = await queryMovies({
+            keyword,
+            year,
+            type,
+            genreId,
+            sort,
+            isSuggest,
+            page,
+            limit,
+            offset,
+        });
+
+        return res.status(200).json(payload);
+    } catch (error) {
+        console.error("[GET /api/movies/search] DB ERROR:", {
+            message: error.message,
+            name: error.name,
+            sql: error.sql,
+            sqlMessage: error.parent?.sqlMessage,
+            sqlState: error.parent?.sqlState,
+            code: error.parent?.code,
+        });
+
+        return res.status(500).json({
+            success: false,
+            message: "Lỗi server khi tìm kiếm phim",
             error: error.parent?.sqlMessage || error.message,
         });
     }

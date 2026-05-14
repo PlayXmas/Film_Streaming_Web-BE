@@ -1,4 +1,5 @@
 // src/server.js
+import "./bootstrap.js";
 import app from "./app.js";
 import { startMediaProcessingCron } from "./cron/mediaProcessing.cron.js";
 import { startSubscriptionCron } from "./cron/subscription.cron.js";
