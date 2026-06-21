@@ -10,6 +10,8 @@ import {
 } from "../config/mediaStorage.js";
 
 async function assertOriginAccess(origin, userTier) {
+    const isTrailer = origin.purpose === "trailer";
+
     if (origin.scope_type === "title") {
         const title = await Title.findByPk(origin.scope_id, {
             attributes: ["id", "is_public", "access_tier"],
@@ -18,7 +20,7 @@ async function assertOriginAccess(origin, userTier) {
         if (!title || !title.is_public) {
             return { status: 404, message: "Không tìm thấy media" };
         }
-        if (title.access_tier === "vip" && userTier !== "vip") {
+        if (!isTrailer && title.access_tier === "vip" && userTier !== "vip") {
             return { status: 403, message: "Bạn cần nâng cấp gói VIP để xem nội dung này" };
         }
 
@@ -46,13 +48,13 @@ async function assertOriginAccess(origin, userTier) {
         if (!episode || !title || !title.is_public) {
             return { status: 404, message: "Không tìm thấy media" };
         }
-        if (title.access_tier === "vip" && userTier !== "vip") {
+        if (!isTrailer && title.access_tier === "vip" && userTier !== "vip") {
             return { status: 403, message: "Bạn cần nâng cấp gói VIP để xem nội dung này" };
         }
-        if (episode.Season?.access_tier === "vip" && userTier !== "vip") {
+        if (!isTrailer && episode.Season?.access_tier === "vip" && userTier !== "vip") {
             return { status: 403, message: "Bạn cần nâng cấp gói VIP để xem season này" };
         }
-        if (episode.access_tier === "vip" && userTier !== "vip") {
+        if (!isTrailer && episode.access_tier === "vip" && userTier !== "vip") {
             return { status: 403, message: "Bạn cần nâng cấp gói VIP để xem tập này" };
         }
 
@@ -171,7 +173,8 @@ export const getProtectedMasterPlaylist = async (req, res) => {
             });
         }
 
-        const allowedVariants = filterVariantsForTier(origin.MediaVariants || [], userTier);
+        const playbackTier = origin.purpose === "trailer" ? "vip" : userTier;
+        const allowedVariants = filterVariantsForTier(origin.MediaVariants || [], playbackTier);
         if (!allowedVariants.length) {
             return res.status(403).json({
                 success: false,
@@ -210,7 +213,8 @@ export const getProtectedVariantPlaylist = async (req, res) => {
             });
         }
 
-        const variant = filterVariantsForTier(origin.MediaVariants || [], userTier).find(
+        const playbackTier = origin.purpose === "trailer" ? "vip" : userTier;
+        const variant = filterVariantsForTier(origin.MediaVariants || [], playbackTier).find(
             (item) => item.quality === quality
         );
         if (!variant?.playlist_url) {
@@ -257,7 +261,8 @@ export const getProtectedVariantAsset = async (req, res) => {
             });
         }
 
-        const variant = filterVariantsForTier(origin.MediaVariants || [], userTier).find(
+        const playbackTier = origin.purpose === "trailer" ? "vip" : userTier;
+        const variant = filterVariantsForTier(origin.MediaVariants || [], playbackTier).find(
             (item) => item.quality === quality
         );
         if (!variant) {

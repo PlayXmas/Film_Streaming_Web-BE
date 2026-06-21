@@ -25,8 +25,6 @@ import subscriptionModel from "./subscription.model.js";
 import paymentModel from "./payment.model.js";
 import paymentEventModel from "./paymentEvent.model.js";
 import reportModel from "./report.model.js";
-import vTitlePublicModel from "./vTitlePublic.model.js";
-import vEpisodeEffectiveAccessModel from "./vEpisodeEffectiveAccess.model.js";
 import userRecommendationModel from "./userRecommendation.model.js";
 import userSearchLogModel from "./userSearchLog.model.js";
 import passwordResetTokenModel from "./passwordResetToken.model.js";
@@ -54,8 +52,6 @@ const Subscription = subscriptionModel(sequelize, DataTypes);
 const Payment = paymentModel(sequelize, DataTypes);
 const PaymentEvent = paymentEventModel(sequelize, DataTypes);
 const Report = reportModel(sequelize, DataTypes);
-const VTitlePublic = vTitlePublicModel(sequelize, DataTypes);
-const VEpisodeEffectiveAccess = vEpisodeEffectiveAccessModel(sequelize, DataTypes);
 const UserRecommendation = userRecommendationModel(sequelize, DataTypes);
 const UserSearchLog = userSearchLogModel(sequelize, DataTypes);
 const PasswordResetToken = passwordResetTokenModel(sequelize, DataTypes);
@@ -222,8 +218,6 @@ export {
   UserRecommendation,
   UserSearchLog,
   PasswordResetToken,
-  VTitlePublic,
-  VEpisodeEffectiveAccess,
 };
 
 export default sequelize;

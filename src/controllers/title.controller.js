@@ -872,7 +872,8 @@ export const getTitlePlay = async (req, res) => {
             });
         }
 
-        if (title.access_tier === "vip" && userTier !== "vip") {
+        // Trailer is promotional media and must not inherit the title's VIP gate.
+        if (purpose !== "trailer" && title.access_tier === "vip" && userTier !== "vip") {
             return res.status(403).json({
                 success: false,
                 message: "Bạn cần nâng cấp gói VIP để xem nội dung này",
@@ -1018,7 +1019,8 @@ export const getTitlePlay = async (req, res) => {
         }
 
         const origin = origins[0].toJSON();
-        const allowedVariants = filterVariantsForTier(origin.MediaVariants || [], userTier);
+        const playbackTier = purpose === "trailer" ? "vip" : userTier;
+        const allowedVariants = filterVariantsForTier(origin.MediaVariants || [], playbackTier);
 
         let defaultQuality = null;
         if (allowedVariants.length) {
