@@ -51,6 +51,16 @@ MEDIA_FFMPEG_CRF=21
 MEDIA_HLS_SEGMENT_SECONDS=6
 MEDIA_HLS_GOP=48
 
+# Recommendation ML cron
+# Mặc định chạy Python ML mỗi 3 phút = 180000ms
+RECOMMENDATION_CRON_INTERVAL_MS=180000
+# Đặt true nếu muốn tắt cron gợi ý phim
+DISABLE_RECOMMENDATION_CRON=false
+# Bỏ trống để tự dùng Python_Recommend-Film/.venv-ml nếu có, fallback sang python trong PATH
+RECOMMENDATION_PYTHON_COMMAND=
+RECOMMENDATION_ML_DIR=
+RECOMMENDATION_ML_SCRIPT=ml_train_hybrid_als.py
+
 # VNPay
 VNP_TMNCODE=
 VNP_HASH_SECRET=
