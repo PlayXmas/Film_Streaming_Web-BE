@@ -157,18 +157,24 @@ function buildMovieOrder(sort) {
     const sortKey = String(sort || "").toLowerCase();
 
     switch (sortKey) {
+        case "added":
+        case "newest":
+        case "recent":
         case "latest":
-            order.push(["release_year", "DESC"]);
+            order.push(["created_at", "DESC"]);
+            order.push(["id", "DESC"]);
             break;
         case "toprated":
         case "top-rated":
             order.push(["imdb_score", "DESC"]);
+            order.push(["id", "DESC"]);
             break;
         case "trending":
             order.push(["popularity", "DESC"]);
+            order.push(["id", "DESC"]);
             break;
         default:
-            order.push(["release_year", "DESC"]);
+            order.push(["created_at", "DESC"]);
             order.push(["id", "DESC"]);
     }
 

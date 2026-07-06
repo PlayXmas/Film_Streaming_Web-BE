@@ -61,6 +61,28 @@ function parseFfprobeDuration(output) {
     return Math.round(value);
 }
 
+function parseFfprobeVideoDimensions(output) {
+    try {
+        const parsed = JSON.parse(String(output || "{}"));
+        const stream = Array.isArray(parsed.streams) ? parsed.streams[0] : null;
+        const width = Number.parseInt(stream?.width, 10);
+        const height = Number.parseInt(stream?.height, 10);
+
+        if (
+            !Number.isInteger(width) ||
+            width <= 0 ||
+            !Number.isInteger(height) ||
+            height <= 0
+        ) {
+            return null;
+        }
+
+        return { width, height };
+    } catch {
+        return null;
+    }
+}
+
 function formatMediaProcessingError(error) {
     return String(error?.stderr || error?.message || error || "Unknown error");
 }
@@ -262,6 +284,40 @@ async function probeDurationSeconds(inputPath) {
     }
 }
 
+async function probeVideoDimensions(inputPath) {
+    try {
+        const { stdout } = await runProcess("ffprobe", [
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "json",
+            inputPath,
+        ]);
+        return parseFfprobeVideoDimensions(stdout);
+    } catch {
+        return null;
+    }
+}
+
+async function getProfilesForSource(inputPath) {
+    const enabledProfiles = getEnabledProfiles();
+    const sourceDimensions = await probeVideoDimensions(inputPath);
+
+    if (!sourceDimensions) {
+        return enabledProfiles;
+    }
+
+    return enabledProfiles.filter(
+        (profile) =>
+            profile.width <= sourceDimensions.width ||
+            profile.height <= sourceDimensions.height
+    );
+}
+
 async function transcodeProfile(inputPath, originId, profile) {
     const outputDir = getOriginVariantDir(originId, profile.quality);
     await fs.mkdir(outputDir, { recursive: true });
@@ -321,10 +377,10 @@ async function transcodeProfile(inputPath, originId, profile) {
 async function transcodeOriginToHls(origin) {
     const inputPath = await readSourceAbsolutePath(origin);
     const originHlsDir = getOriginHlsDir(origin.id);
-    const profiles = getEnabledProfiles();
+    const profiles = await getProfilesForSource(inputPath);
 
     if (!profiles.length) {
-        throw new Error("Không có profile quality nào được bật");
+        throw new Error("Không có profile quality nào phù hợp với video nguồn");
     }
 
     await ensureEmptyDirectory(originHlsDir);
