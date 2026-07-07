@@ -1,5 +1,6 @@
 import "../bootstrap.js";
 import crypto from "node:crypto";
+import net from "node:net";
 
 const DEFAULT_TIMEZONE = process.env.VNP_TIMEZONE || "Asia/Ho_Chi_Minh";
 const DEFAULT_QUERYDR_SANDBOX_URL = "https://sandbox.vnpayment.vn/merchant_webapi/api/transaction";
@@ -113,8 +114,7 @@ export function signVnpayParams(params = {}, hashSecret = process.env.VNP_HASH_S
     delete signData.vnp_SecureHash;
     delete signData.vnp_SecureHashType;
 
-    const query = buildVnpayQueryString(signData);
-    return hmacSha512(hashSecret, query);
+    return hmacSha512(hashSecret, buildVnpayQueryString(signData));
 }
 
 export function verifyVnpaySignature(params = {}, hashSecret = process.env.VNP_HASH_SECRET) {
@@ -167,15 +167,28 @@ export function buildTxnRef(userId) {
 export function getClientIp(req) {
     const forwarded = req.headers["x-forwarded-for"];
     if (typeof forwarded === "string" && forwarded.trim()) {
-        return forwarded.split(",")[0].trim();
+        return normalizeClientIp(forwarded.split(",")[0].trim());
     }
 
-    return (
+    const ip =
         req.headers["x-real-ip"] ||
         req.socket?.remoteAddress ||
         req.ip ||
-        "127.0.0.1"
-    );
+        "127.0.0.1";
+
+    return normalizeClientIp(ip);
+}
+
+function normalizeClientIp(value) {
+    let ip = String(value || "").trim();
+
+    if (!ip) return "127.0.0.1";
+    if (ip === "::1" || ip === "0:0:0:0:0:0:0:1") return "127.0.0.1";
+    if (ip.startsWith("::ffff:")) {
+        ip = ip.slice("::ffff:".length);
+    }
+
+    return net.isIP(ip) ? ip : "127.0.0.1";
 }
 
 export function amountToVnpay(amount) {
@@ -222,10 +235,7 @@ export function buildVnpayPaymentUrl({
     }
 
     const secureHash = signVnpayParams(params, config.hashSecret);
-    const query = buildVnpayQueryString({
-        ...params,
-        vnp_SecureHash: secureHash,
-    });
+    const query = `${buildVnpayQueryString(params)}&vnp_SecureHash=${secureHash}`;
 
     return `${config.url}?${query}`;
 }

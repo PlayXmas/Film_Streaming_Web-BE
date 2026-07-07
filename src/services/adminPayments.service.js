@@ -359,8 +359,8 @@ async function postVnpayQuerydr(requestPayload, config) {
     }
 }
 
-function applyQuerydrDataToPayment(payment, responsePayload) {
-    payment.signature_valid = verifyVnpayQuerydrResponse(responsePayload, getVnpayConfig().hashSecret);
+function applyQuerydrDataToPayment(payment, responsePayload, responseSignatureValid) {
+    payment.signature_valid = responseSignatureValid;
     payment.last_response_code = responsePayload.vnp_ResponseCode || null;
     payment.last_transaction_status = responsePayload.vnp_TransactionStatus || null;
     payment.provider_txn_id =
@@ -528,9 +528,12 @@ export async function querydrAdminPayment(paymentId, actor, requestMeta = {}) {
         );
 
         const querydrResponse = await postVnpayQuerydr(querydrRequest.requestPayload, config);
-        const responseSignatureValid = verifyVnpayQuerydrResponse(querydrResponse, config.hashSecret);
+        const responseHasSignature = Boolean(querydrResponse?.vnp_SecureHash);
+        const responseSignatureValid = responseHasSignature
+            ? verifyVnpayQuerydrResponse(querydrResponse, config.hashSecret)
+            : null;
 
-        if (!responseSignatureValid) {
+        if (responseHasSignature && !responseSignatureValid) {
             const checksumData = buildVnpayQuerydrResponseChecksumData(querydrResponse);
             console.error("[VNPAY][QUERYDR] invalid_response_signature", {
                 payment_id: payment.id,
@@ -542,7 +545,11 @@ export async function querydrAdminPayment(paymentId, actor, requestMeta = {}) {
             throw createServiceError("Chu ky response QueryDR khong hop le", 502);
         }
 
-        applyQuerydrDataToPayment(payment, querydrResponse);
+        if (!responseHasSignature && querydrResponse?.vnp_ResponseCode === "00") {
+            throw createServiceError("VNPay QueryDR thieu chu ky response", 502);
+        }
+
+        applyQuerydrDataToPayment(payment, querydrResponse, responseSignatureValid);
 
         const nextStatus = mapPaymentStatusFromQuerydr(querydrResponse);
         let synced = false;
@@ -613,7 +620,7 @@ export async function querydrAdminPayment(paymentId, actor, requestMeta = {}) {
                 synced,
                 response_code: querydrResponse.vnp_ResponseCode || null,
                 transaction_status: querydrResponse.vnp_TransactionStatus || null,
-                response_signature_valid: true,
+                response_signature_valid: responseSignatureValid,
                 actor_user_id: actor?.id || null,
                 actor_name: actor?.display_name || actor?.email || null,
                 actor_email: actor?.email || null,
@@ -630,7 +637,7 @@ export async function querydrAdminPayment(paymentId, actor, requestMeta = {}) {
                 event_type: "querydr_completed",
                 event_source: "admin",
                 is_success: querydrResponse.vnp_ResponseCode === "00",
-                signature_valid: true,
+                signature_valid: responseSignatureValid,
                 response_code: querydrResponse.vnp_ResponseCode || null,
                 transaction_status: querydrResponse.vnp_TransactionStatus || null,
                 message: mapQuerydrOutcome(querydrResponse),
